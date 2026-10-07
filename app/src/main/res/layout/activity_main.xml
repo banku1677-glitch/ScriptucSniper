@@ -48,6 +48,15 @@
         android:layout_marginBottom="12dp" />
 
     <Button
+        android:id="@+id/btnCheck"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Проверить статус Accessibility"
+        android:backgroundTint="@color/purple_dim"
+        android:textColor="@color/text_primary"
+        android:layout_marginBottom="8dp" />
+
+    <Button
         android:id="@+id/btnAccessibility"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
