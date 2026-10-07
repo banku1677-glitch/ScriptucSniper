@@ -179,10 +179,20 @@ class ScreenReader(private val ctx: Context) {
     private var height = 0
     private var dpi = 0
 
+    private val projectionCallback = object : MediaProjection.Callback() {
+        override fun onStop() {
+            try { virtualDisplay?.release() } catch (_: Throwable) {}
+            virtualDisplay = null
+        }
+    }
+
     @SuppressLint("WrongConstant")
     fun start(resultCode: Int, data: Intent) {
         val mgr = ctx.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-        projection = mgr.getMediaProjection(resultCode, data)
+        val proj = mgr.getMediaProjection(resultCode, data)
+
+        proj.registerCallback(projectionCallback, Handler(Looper.getMainLooper()))
+        projection = proj
 
         val wm = ctx.getSystemService(Context.WINDOW_SERVICE) as WindowManager
         val bounds = wm.currentWindowMetrics.bounds
@@ -192,7 +202,7 @@ class ScreenReader(private val ctx: Context) {
 
         imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
 
-        virtualDisplay = projection!!.createVirtualDisplay(
+        virtualDisplay = proj.createVirtualDisplay(
             "scriptuc-capture",
             width, height, dpi,
             DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
@@ -201,6 +211,7 @@ class ScreenReader(private val ctx: Context) {
     }
 
     fun stop() {
+        try { projection?.unregisterCallback(projectionCallback) } catch (_: Throwable) {}
         try { virtualDisplay?.release() } catch (_: Throwable) {}
         try { imageReader?.close() } catch (_: Throwable) {}
         try { projection?.stop() } catch (_: Throwable) {}
@@ -217,6 +228,8 @@ class ScreenReader(private val ctx: Context) {
         }
         reader.setOnImageAvailableListener({ r ->
             var image: Image? = null
+            var bmp: Bitmap? = null
+            var cropped: Bitmap? = null
             try {
                 image = r.acquireLatestImage()
                 if (image == null) {
@@ -229,15 +242,17 @@ class ScreenReader(private val ctx: Context) {
                 val pixelStride = plane.pixelStride
                 val rowPadding = rowStride - pixelStride * width
 
-                val bmp = Bitmap.createBitmap(
+                bmp = Bitmap.createBitmap(
                     width + rowPadding / pixelStride, height, Bitmap.Config.ARGB_8888
                 )
                 bmp.copyPixelsFromBuffer(buffer)
-                val cropped = Bitmap.createBitmap(bmp, 0, 0, width, height)
+                cropped = Bitmap.createBitmap(bmp, 0, 0, width, height)
                 cont.resume(cropped)
             } catch (t: Throwable) {
+                try { cropped?.recycle() } catch (_: Throwable) {}
                 cont.resume(null)
             } finally {
+                try { bmp?.recycle() } catch (_: Throwable) {}
                 image?.close()
                 r.setOnImageAvailableListener(null, null)
             }
@@ -299,7 +314,6 @@ class SniperService : Service() {
     override fun onCreate() {
         super.onCreate()
 
-        // логгер падений — пишет стек в files/crash.txt
         Thread.setDefaultUncaughtExceptionHandler { _, t ->
             try {
                 val sw = java.io.StringWriter()
@@ -522,7 +536,6 @@ class MainActivity : AppCompatActivity() {
             val names = if (enabled.isEmpty()) "(пусто)" else enabled.joinToString("\n") { it.id }
             appendLog("instance = $inst")
             appendLog("enabled services:\n$names")
-            // плюс читаем crash.txt
             try {
                 val f = java.io.File(filesDir, "crash.txt")
                 if (f.exists()) {
