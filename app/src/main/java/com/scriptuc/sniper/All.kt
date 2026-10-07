@@ -1,6 +1,7 @@
 package com.scriptuc.sniper
 
 import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.AccessibilityServiceInfo
 import android.accessibilityservice.GestureDescription
 import android.annotation.SuppressLint
 import android.app.Activity
@@ -31,6 +32,7 @@ import android.provider.Settings
 import android.view.MotionEvent
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
+import android.view.accessibility.AccessibilityManager
 import android.widget.Button
 import android.widget.EditText
 import android.widget.FrameLayout
@@ -448,6 +450,15 @@ class MainActivity : AppCompatActivity() {
 
         findViewById<Button>(R.id.btnSettings).setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
+        }
+
+        findViewById<Button>(R.id.btnCheck).setOnClickListener {
+            val inst = TapService.instance
+            val mgr = getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
+            val enabled = mgr.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
+            val names = if (enabled.isEmpty()) "(пусто)" else enabled.joinToString("\n") { it.id }
+            appendLog("instance = $inst")
+            appendLog("enabled services:\n$names")
         }
 
         btnStart.setOnClickListener {
