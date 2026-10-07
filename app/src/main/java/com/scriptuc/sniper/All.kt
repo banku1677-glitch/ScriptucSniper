@@ -63,19 +63,31 @@ data class Config(
     val delayInput: Long = 10L,
     val delayKlava: Long = 1200L,
     val delayOtmena: Long = 1200L,
+
+    // --- РЕГИОНЫ ЧТЕНИЯ (x, y, w, h) ---
     val zaprosRegion: IntArray = intArrayOf(1764, 187, 145, 27),
     val lotRegion: IntArray = intArrayOf(1133, 386, 253, 75),
-    val btnZakaz: IntArray = intArrayOf(2209, 201),
-    val btnVtoroyZakaz: IntArray = intArrayOf(1230, 787),
-    val btnNazad: IntArray = intArrayOf(1825, 244),
-    val btnOtmena: IntArray = intArrayOf(2217, 340),
-    val btnGalochka: IntArray = intArrayOf(2206, 888),
-    val btnTochka: IntArray = intArrayOf(415, 904),
+
+    // --- ТОЧКИ КНОПОК (x, y) ---
+    val btnZakaz: IntArray = intArrayOf(2111, 183),
+    val btnVtoroyZakaz: IntArray = intArrayOf(1880, 189),
+    val btnNazad: IntArray = intArrayOf(1740, 263),
+    val btnOtmena: IntArray = intArrayOf(1730, 282),
+    val btnGalochka: IntArray = intArrayOf(1944, 912),
+    val btnTochka: IntArray = intArrayOf(1419, 972),
+
+    // --- ЦИФРЫ 0-9 (x, y) ---
     val numKeys: Array<IntArray> = arrayOf(
-        intArrayOf(1029, 509), intArrayOf(413, 512), intArrayOf(1025, 889),
-        intArrayOf(1640, 513), intArrayOf(411, 640), intArrayOf(1031, 640),
-        intArrayOf(1630, 638), intArrayOf(419, 762), intArrayOf(1025, 760),
-        intArrayOf(1643, 767)
+        intArrayOf(929, 894),   // 0
+        intArrayOf(449, 559),   // 1
+        intArrayOf(941, 571),   // 2
+        intArrayOf(1401, 560),  // 3
+        intArrayOf(414, 682),   // 4
+        intArrayOf(938, 669),   // 5
+        intArrayOf(1427, 651),  // 6
+        intArrayOf(414, 795),   // 7
+        intArrayOf(934, 788),   // 8
+        intArrayOf(1398, 810)   // 9
     ),
 ) {
     companion object {
@@ -96,10 +108,10 @@ data class Config(
             }
 
             val defaultNumKeys = arrayOf(
-                intArrayOf(1029, 509), intArrayOf(413, 512), intArrayOf(1025, 889),
-                intArrayOf(1640, 513), intArrayOf(411, 640), intArrayOf(1031, 640),
-                intArrayOf(1630, 638), intArrayOf(419, 762), intArrayOf(1025, 760),
-                intArrayOf(1643, 767)
+                intArrayOf(929, 894), intArrayOf(449, 559), intArrayOf(941, 571),
+                intArrayOf(1401, 560), intArrayOf(414, 682), intArrayOf(938, 669),
+                intArrayOf(1427, 651), intArrayOf(414, 795), intArrayOf(934, 788),
+                intArrayOf(1398, 810)
             )
             val loadedNumKeys = Array(10) { i -> pt("num$i", defaultNumKeys[i]) }
 
@@ -114,12 +126,12 @@ data class Config(
                 delayOtmena = p.getLong("delayOtmena", 1200L),
                 zaprosRegion = rg("zaprosRegion", intArrayOf(1764, 187, 145, 27)),
                 lotRegion = rg("lotRegion", intArrayOf(1133, 386, 253, 75)),
-                btnZakaz = pt("btnZakaz", intArrayOf(2209, 201)),
-                btnVtoroyZakaz = pt("btnVtoroyZakaz", intArrayOf(1230, 787)),
-                btnNazad = pt("btnNazad", intArrayOf(1825, 244)),
-                btnOtmena = pt("btnOtmena", intArrayOf(2217, 340)),
-                btnGalochka = pt("btnGalochka", intArrayOf(2206, 888)),
-                btnTochka = pt("btnTochka", intArrayOf(415, 904)),
+                btnZakaz = pt("btnZakaz", intArrayOf(2111, 183)),
+                btnVtoroyZakaz = pt("btnVtoroyZakaz", intArrayOf(1880, 189)),
+                btnNazad = pt("btnNazad", intArrayOf(1740, 263)),
+                btnOtmena = pt("btnOtmena", intArrayOf(1730, 282)),
+                btnGalochka = pt("btnGalochka", intArrayOf(1944, 912)),
+                btnTochka = pt("btnTochka", intArrayOf(1419, 972)),
                 numKeys = loadedNumKeys,
             )
         }
