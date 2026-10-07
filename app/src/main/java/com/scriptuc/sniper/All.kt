@@ -530,19 +530,6 @@ class SettingsActivity : AppCompatActivity() {
     private var pendingTarget: String? = null
     private val numFields = arrayOfNulls<EditText>(10)
 
-    private val pickLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { res ->
-        if (res.resultCode == RESULT_OK && res.data != null) {
-            val x = res.data!!.getIntExtra("x", -1)
-            val y = res.data!!.getIntExtra("y", -1)
-            val t = pendingTarget ?: return@registerForActivityResult
-            if (x < 0 || y < 0) return@registerForActivityResult
-            setTargetValue(t, x, y)
-            Toast.makeText(this, "$t = $x, $y", Toast.LENGTH_SHORT).show()
-        }
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
@@ -565,8 +552,7 @@ class SettingsActivity : AppCompatActivity() {
             val et = row.findViewById<EditText>(R.id.etNum)
             et.setText(cfg.numKeys[i].joinToString(","))
             row.findViewById<Button>(R.id.btnPickNum).setOnClickListener {
-                pendingTarget = "num$i"
-                pickLauncher.launch(Intent(this, PickerActivity::class.java))
+                launchCalib("num$i")
             }
             cont.addView(row)
             numFields[i] = et
@@ -581,10 +567,43 @@ class SettingsActivity : AppCompatActivity() {
     private fun bindPoint(key: String, etId: Int, btnId: Int, value: IntArray) {
         val et = findViewById<EditText>(etId)
         et.setText(value.joinToString(","))
-        findViewById<Button>(btnId).setOnClickListener {
+        findViewById<Button>(btnId).setOnClickListener { launchCalib(key) }
+    }
+
+    private fun launchCalib(key: String) {
+        if (!Settings.canDrawOverlays(this)) {
             pendingTarget = key
-            pickLauncher.launch(Intent(this, PickerActivity::class.java))
+            startActivity(Intent(
+                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Uri.parse("package:$packageName")
+            ))
+            return
         }
+        val i = Intent(this, CalibrationService::class.java).apply {
+            putExtra(CalibrationService.EXTRA_KEY, key)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(i)
+        else startService(i)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        CalibResult.onResult = { k, x, y ->
+            runOnUiThread {
+                setTargetValue(k, x, y)
+                Toast.makeText(this, "$k = $x, $y", Toast.LENGTH_SHORT).show()
+            }
+        }
+        val pk = pendingTarget
+        if (!pk.isNullOrEmpty() && Settings.canDrawOverlays(this)) {
+            pendingTarget = null
+            launchCalib(pk)
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        CalibResult.onResult = null
     }
 
     private fun setTargetValue(key: String, x: Int, y: Int) {
