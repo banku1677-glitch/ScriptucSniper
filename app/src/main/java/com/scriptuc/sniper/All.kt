@@ -444,10 +444,11 @@ class MainActivity : AppCompatActivity() {
     private val projectionLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { res ->
+        appendLog(">>> callback: rc=${res.resultCode} data=${res.data != null}")
         if (res.resultCode == RESULT_OK && res.data != null) {
             startSniperService(res.resultCode, res.data!!)
         } else {
-            appendLog("MediaProjection отклонён")
+            appendLog("MediaProjection отклонён (rc=${res.resultCode})")
         }
     }
 
@@ -475,11 +476,13 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnStart.setOnClickListener {
+            appendLog(">>> нажат Start")
             if (TapService.instance == null) {
-                appendLog("Сначала включи Accessibility")
+                appendLog(">>> TapService null, открываю Accessibility")
                 startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                 return@setOnClickListener
             }
+            appendLog(">>> вызываю createScreenCaptureIntent")
             requestProjection()
         }
 
@@ -512,8 +515,15 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun requestProjection() {
-        val mgr = getSystemService(MediaProjectionManager::class.java)
-        projectionLauncher.launch(mgr.createScreenCaptureIntent())
+        try {
+            val mgr = getSystemService(MediaProjectionManager::class.java)
+            val i = mgr.createScreenCaptureIntent()
+            appendLog(">>> intent создан: $i")
+            projectionLauncher.launch(i)
+            appendLog(">>> launch() вызван")
+        } catch (t: Throwable) {
+            appendLog(">>> ОШИБКА launch: ${t.message}")
+        }
     }
 
     private fun startSniperService(resultCode: Int, data: Intent) {
