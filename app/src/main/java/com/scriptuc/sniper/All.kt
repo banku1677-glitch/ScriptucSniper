@@ -12,6 +12,7 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.content.pm.ServiceInfo
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Path
@@ -297,10 +298,24 @@ class SniperService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+
+        // логгер падений — пишет стек в files/crash.txt
+        Thread.setDefaultUncaughtExceptionHandler { _, t ->
+            try {
+                val sw = java.io.StringWriter()
+                t.printStackTrace(java.io.PrintWriter(sw))
+                java.io.File(filesDir, "crash.txt").appendText(
+                    "\n\n=== CRASH ${System.currentTimeMillis()} ===\n" + sw.toString()
+                )
+            } catch (_: Throwable) {}
+            android.util.Log.e("ScriptucCrash", "FATAL", t)
+            android.os.Process.killProcess(android.os.Process.myPid())
+        }
+
         cfg = Config.load(this)
         screenReader = ScreenReader(this)
         ocr = PriceOcr()
-        startForeground(NOTIF_ID, buildNotification())
+        createChannel()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -319,15 +334,45 @@ class SniperService : Service() {
                 @Suppress("DEPRECATION")
                 val data: Intent? = intent.getParcelableExtra(EXTRA_DATA)
                 if (data == null) {
+                    startForegroundCompat()
                     log("Нет данных MediaProjection — стоп")
+                    stopForeground(STOP_FOREGROUND_REMOVE)
                     stopSelf()
                     return START_NOT_STICKY
                 }
-                screenReader.start(rc, data)
+
+                startForegroundCompat()
+                try {
+                    screenReader.start(rc, data)
+                } catch (t: Throwable) {
+                    log("Ошибка старта ScreenReader: ${t.message}")
+                    try {
+                        val sw = java.io.StringWriter()
+                        t.printStackTrace(java.io.PrintWriter(sw))
+                        java.io.File(filesDir, "crash.txt").appendText(
+                            "\n\n=== ScreenReader.start ${System.currentTimeMillis()} ===\n" + sw.toString()
+                        )
+                    } catch (_: Throwable) {}
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
                 startLoop()
             }
         }
         return START_NOT_STICKY
+    }
+
+    private fun startForegroundCompat() {
+        val notif = buildNotification()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(
+                NOTIF_ID,
+                notif,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
+            )
+        } else {
+            startForeground(NOTIF_ID, notif)
+        }
     }
 
     override fun onDestroy() {
@@ -416,17 +461,21 @@ class SniperService : Service() {
         }
     }
 
-    private fun buildNotification(): Notification {
+    private fun createChannel() {
         val mgr = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val ch = NotificationChannel(CHANNEL_ID, "Sniper", NotificationManager.IMPORTANCE_LOW)
             mgr.createNotificationChannel(ch)
         }
+    }
+
+    private fun buildNotification(): Notification {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Scriptuc Sniper")
             .setContentText("Работает")
             .setSmallIcon(android.R.drawable.ic_menu_compass)
             .setOngoing(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
     }
 
@@ -473,6 +522,18 @@ class MainActivity : AppCompatActivity() {
             val names = if (enabled.isEmpty()) "(пусто)" else enabled.joinToString("\n") { it.id }
             appendLog("instance = $inst")
             appendLog("enabled services:\n$names")
+            // плюс читаем crash.txt
+            try {
+                val f = java.io.File(filesDir, "crash.txt")
+                if (f.exists()) {
+                    appendLog("=== crash.txt ===")
+                    appendLog(f.readText().takeLast(2000))
+                } else {
+                    appendLog("crash.txt нет")
+                }
+            } catch (t: Throwable) {
+                appendLog("crash.txt ошибка: ${t.message}")
+            }
         }
 
         btnStart.setOnClickListener {
