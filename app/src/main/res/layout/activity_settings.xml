@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="16dp"
+    android:background="@color/bg_deep">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <TextView android:text="Регионы чтения (x,y,w,h)"
+            android:textStyle="bold" android:textSize="18sp"
+            android:textColor="@color/purple_bright"
+            android:layout_marginBottom="8dp"
+            android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+
+        <TextView android:text="Цена чужого ордера:" android:textColor="@color/text_secondary"
+            android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+        <EditText android:id="@+id/etZapros"
+            android:textColor="@color/text_primary" android:backgroundTint="@color/purple_dim"
+            android:inputType="text"
+            android:layout_width="match_parent" android:layout_height="wrap_content"/>
+
+        <TextView android:text="Цена лота:" android:textColor="@color/text_secondary"
+            android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+        <EditText android:id="@+id/etLot"
+            android:textColor="@color/text_primary" android:backgroundTint="@color/purple_dim"
+            android:inputType="text"
+            android:layout_width="match_parent" android:layout_height="wrap_content"/>
+
+        <TextView android:text="Точки кнопок (x,y)"
+            android:textStyle="bold" android:textSize="18sp"
+            android:textColor="@color/purple_bright"
+            android:layout_marginTop="16dp" android:layout_marginBottom="8dp"
+            android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+
+        <TextView android:text="Заказать:" android:textColor="@color/text_secondary"
+            android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+        <LinearLayout android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content">
+            <EditText android:id="@+id/etBtnZakaz"
+                android:textColor="@color/text_primary" android:backgroundTint="@color/purple_dim"
+                android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"/>
+            <Button android:id="@+id/btnPickBtnZakaz" android:text="взять"
+                android:backgroundTint="@color/purple_dim" android:textColor="@color/text_primary"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+        </LinearLayout>
+
+        <TextView android:text="Выставить ордер:" android:textColor="@color/text_secondary"
+            android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+        <LinearLayout android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content">
+            <EditText android:id="@+id/etBtnVtoroy"
+                android:textColor="@color/text_primary" android:backgroundTint="@color/purple_dim"
+                android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"/>
+            <Button android:id="@+id/btnPickBtnVtoroy" android:text="взять"
+                android:backgroundTint="@color/purple_dim" android:textColor="@color/text_primary"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+        </LinearLayout>
+
+        <TextView android:text="Назад из заказа:" android:textColor="@color/text_secondary"
+            android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+        <LinearLayout android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content">
+            <EditText android:id="@+id/etBtnNazad"
+                android:textColor="@color/text_primary" android:backgroundTint="@color/purple_dim"
+                android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"/>
+            <Button android:id="@+id/btnPickBtnNazad" android:text="взять"
+                android:backgroundTint="@color/purple_dim" android:textColor="@color/text_primary"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+        </LinearLayout>
+
+        <TextView android:text="Отмена:" android:textColor="@color/text_secondary"
+            android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+        <LinearLayout android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content">
+            <EditText android:id="@+id/etBtnOtmena"
+                android:textColor="@color/text_primary" android:backgroundTint="@color/purple_dim"
+                android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"/>
+            <Button android:id="@+id/btnPickBtnOtmena" android:text="взять"
+                android:backgroundTint="@color/purple_dim" android:textColor="@color/text_primary"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+        </LinearLayout>
+
+        <TextView android:text="Галочка на клавиатуре:" android:textColor="@color/text_secondary"
+            android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+        <LinearLayout android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content">
+            <EditText android:id="@+id/etBtnGalochka"
+                android:textColor="@color/text_primary" android:backgroundTint="@color/purple_dim"
+                android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"/>
+            <Button android:id="@+id/btnPickBtnGalochka" android:text="взять"
+                android:backgroundTint="@color/purple_dim" android:textColor="@color/text_primary"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+        </LinearLayout>
+
+        <TextView android:text="Точка «.» на клавиатуре:" android:textColor="@color/text_secondary"
+            android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+        <LinearLayout android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content">
+            <EditText android:id="@+id/etBtnTochka"
+                android:textColor="@color/text_primary" android:backgroundTint="@color/purple_dim"
+                android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"/>
+            <Button android:id="@+id/btnPickBtnTochka" android:text="взять"
+                android:backgroundTint="@color/purple_dim" android:textColor="@color/text_primary"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+        </LinearLayout>
+
+        <TextView android:text="Цифры 0-9 (x,y)"
+            android:textStyle="bold" android:textSize="18sp"
+            android:textColor="@color/purple_bright"
+            android:layout_marginTop="16dp" android:layout_marginBottom="8dp"
+            android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+
+        <LinearLayout
+            android:id="@+id/numContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+
+        <TextView android:text="Параметры перебива"
+            android:textStyle="bold" android:textSize="18sp"
+            android:textColor="@color/purple_bright"
+            android:layout_marginTop="16dp" android:layout_marginBottom="8dp"
+            android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+
+        <TextView android:text="Шаг перебива:" android:textColor="@color/text_secondary"
+            android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+        <EditText android:id="@+id/etPerebiv"
+            android:textColor="@color/text_primary" android:backgroundTint="@color/purple_dim"
+            android:inputType="numberDecimal"
+            android:layout_width="match_parent" android:layout_height="wrap_content"/>
+
+        <TextView android:text="Пауза цикла, мс:" android:textColor="@color/text_secondary"
+            android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+        <EditText android:id="@+id/etLoopMs"
+            android:textColor="@color/text_primary" android:backgroundTint="@color/purple_dim"
+            android:inputType="number"
+            android:layout_width="match_parent" android:layout_height="wrap_content"/>
+
+        <Button android:id="@+id/btnSave" android:text="Сохранить"
+            android:backgroundTint="@color/purple_primary"
+            android:textColor="@color/bg_deep"
+            android:layout_marginTop="24dp"
+            android:layout_width="match_parent" android:layout_height="wrap_content"/>
+    </LinearLayout>
+</ScrollView>
