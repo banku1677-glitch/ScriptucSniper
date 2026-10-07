@@ -46,7 +46,7 @@
                 android:resource="@xml/accessibility_service_config" />
             <meta-data
                 android:name="android.accessibilityservice.isAccessibilityTool"
-                android:value="false" />
+                android:value="true" />
         </service>
     </application>
 </manifest>
