@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal">
+
+    <TextView android:id="@+id/tvNum"
+        android:text="0:"
+        android:textColor="@color/text_secondary"
+        android:minWidth="32dp"
+        android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+    <EditText android:id="@+id/etNum"
+        android:textColor="@color/text_primary"
+        android:textColorHint="@color/text_hint"
+        android:backgroundTint="@color/purple_dim"
+        android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"/>
+    <Button android:id="@+id/btnPickNum" android:text="взять"
+        android:backgroundTint="@color/purple_dim"
+        android:textColor="@color/text_primary"
+        android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+</LinearLayout>
