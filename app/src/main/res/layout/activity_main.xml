@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="24dp"
+    android:gravity="center"
+    android:background="@color/bg_deep">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Scriptuc Sniper"
+        android:textSize="26sp"
+        android:textStyle="bold"
+        android:textColor="@color/purple_bright"
+        android:layout_marginBottom="32dp" />
+
+    <Button
+        android:id="@+id/btnStart"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Запустить скрипт"
+        android:backgroundTint="@color/purple_primary"
+        android:textColor="@color/bg_deep"
+        android:padding="16dp"
+        android:layout_marginBottom="12dp" />
+
+    <Button
+        android:id="@+id/btnStop"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Остановить"
+        android:backgroundTint="@color/purple_dim"
+        android:textColor="@color/text_primary"
+        android:padding="16dp"
+        android:enabled="false"
+        android:layout_marginBottom="12dp" />
+
+    <Button
+        android:id="@+id/btnSettings"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Настройки"
+        android:backgroundTint="@color/purple_dim"
+        android:textColor="@color/text_primary"
+        android:padding="16dp"
+        android:layout_marginBottom="12dp" />
+
+    <Button
+        android:id="@+id/btnAccessibility"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Разрешить Accessibility"
+        android:backgroundTint="@color/purple_glow"
+        android:textColor="@color/text_primary"
+        android:layout_marginBottom="8dp" />
+
+    <Button
+        android:id="@+id/btnOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Разрешить Overlay"
+        android:backgroundTint="@color/purple_glow"
+        android:textColor="@color/text_primary"
+        android:layout_marginBottom="16dp" />
+
+    <TextView
+        android:id="@+id/tvLog"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:padding="12dp"
+        android:background="@color/log_bg"
+        android:textColor="@color/log_text"
+        android:fontFamily="monospace"
+        android:textSize="12sp"
+        android:scrollbars="vertical"
+        android:text="" />
+</LinearLayout>
