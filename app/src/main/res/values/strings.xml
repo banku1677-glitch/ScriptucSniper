@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Scriptuc Sniper</string>
+    <string name="accessibility_desc">Нужно для нажатий в игре. Приложение использует сервис только для эмуляции тапов по координатам.</string>
+</resources>
