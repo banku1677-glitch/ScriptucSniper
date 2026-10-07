@@ -315,10 +315,10 @@ class SniperService : Service() {
                     stopSelf()
                     return START_NOT_STICKY
                 }
-                val rc = intent.getIntExtra(EXTRA_RESULT_CODE, -1)
+                val rc = intent.getIntExtra(EXTRA_RESULT_CODE, 0)
                 @Suppress("DEPRECATION")
                 val data: Intent? = intent.getParcelableExtra(EXTRA_DATA)
-                if (rc == -1 || data == null) {
+                if (data == null) {
                     log("Нет данных MediaProjection — стоп")
                     stopSelf()
                     return START_NOT_STICKY
@@ -445,10 +445,10 @@ class MainActivity : AppCompatActivity() {
         ActivityResultContracts.StartActivityForResult()
     ) { res ->
         appendLog(">>> callback: rc=${res.resultCode} data=${res.data != null}")
-        if (res.resultCode == RESULT_OK && res.data != null) {
+        if (res.data != null) {
             startSniperService(res.resultCode, res.data!!)
         } else {
-            appendLog("MediaProjection отклонён (rc=${res.resultCode})")
+            appendLog("MediaProjection отклонён (нет data)")
         }
     }
 
