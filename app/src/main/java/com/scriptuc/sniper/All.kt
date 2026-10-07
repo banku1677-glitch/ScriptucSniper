@@ -64,11 +64,9 @@ data class Config(
     val delayKlava: Long = 1200L,
     val delayOtmena: Long = 1200L,
 
-    // --- РЕГИОНЫ ЧТЕНИЯ (x, y, w, h) ---
     val zaprosRegion: IntArray = intArrayOf(1764, 187, 145, 27),
     val lotRegion: IntArray = intArrayOf(1133, 386, 253, 75),
 
-    // --- ТОЧКИ КНОПОК (x, y) ---
     val btnZakaz: IntArray = intArrayOf(2111, 183),
     val btnVtoroyZakaz: IntArray = intArrayOf(1880, 189),
     val btnNazad: IntArray = intArrayOf(1740, 263),
@@ -76,18 +74,17 @@ data class Config(
     val btnGalochka: IntArray = intArrayOf(1944, 912),
     val btnTochka: IntArray = intArrayOf(1419, 972),
 
-    // --- ЦИФРЫ 0-9 (x, y) ---
     val numKeys: Array<IntArray> = arrayOf(
-        intArrayOf(929, 894),   // 0
-        intArrayOf(449, 559),   // 1
-        intArrayOf(941, 571),   // 2
-        intArrayOf(1401, 560),  // 3
-        intArrayOf(414, 682),   // 4
-        intArrayOf(938, 669),   // 5
-        intArrayOf(1427, 651),  // 6
-        intArrayOf(414, 795),   // 7
-        intArrayOf(934, 788),   // 8
-        intArrayOf(1398, 810)   // 9
+        intArrayOf(929, 894),
+        intArrayOf(449, 559),
+        intArrayOf(941, 571),
+        intArrayOf(1401, 560),
+        intArrayOf(414, 682),
+        intArrayOf(938, 669),
+        intArrayOf(1427, 651),
+        intArrayOf(414, 795),
+        intArrayOf(934, 788),
+        intArrayOf(1398, 810)
     ),
 ) {
     companion object {
@@ -314,9 +311,13 @@ class SniperService : Service() {
                 return START_NOT_STICKY
             }
             else -> {
-                val rc = intent?.getIntExtra(EXTRA_RESULT_CODE, -1) ?: -1
+                if (intent == null) {
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
+                val rc = intent.getIntExtra(EXTRA_RESULT_CODE, -1)
                 @Suppress("DEPRECATION")
-                val data: Intent? = intent?.getParcelableExtra(EXTRA_DATA)
+                val data: Intent? = intent.getParcelableExtra(EXTRA_DATA)
                 if (rc == -1 || data == null) {
                     log("Нет данных MediaProjection — стоп")
                     stopSelf()
@@ -326,7 +327,7 @@ class SniperService : Service() {
                 startLoop()
             }
         }
-        return START_STICKY
+        return START_NOT_STICKY
     }
 
     override fun onDestroy() {
