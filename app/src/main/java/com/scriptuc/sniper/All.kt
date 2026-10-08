@@ -58,7 +58,8 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 
 data class Config(
-    val perebiv: Float = 999f,          // защита — поставь 0.01 когда будешь реально ловить
+    val perebiv: Float = 999f,
+    val maxPrice: Float = 0f,        // 0 = без ограничения
     val loopMs: Long = 10L,
     val delayZakaz: Long = 600L,
     val delayBefore: Long = 400L,
@@ -67,11 +68,9 @@ data class Config(
     val delayKlava: Long = 1500L,
     val delayOtmena: Long = 1500L,
 
-    // РЕГИОНЫ
     val zaprosRegion: IntArray = intArrayOf(1750, 165, 230, 50),
-    val lotRegion: IntArray = intArrayOf(1820, 490, 200, 60),
+    val lotRegion: IntArray = intArrayOf(1700, 470, 400, 70),
 
-    // ТОЧКИ КНОПОК
     val btnZakaz: IntArray = intArrayOf(2139, 186),
     val priceField: IntArray = intArrayOf(990, 395),
     val backspace: IntArray = intArrayOf(1690, 660),
@@ -81,18 +80,11 @@ data class Config(
     val btnGalochka: IntArray = intArrayOf(1911, 916),
     val btnTochka: IntArray = intArrayOf(1411, 922),
 
-    // ЦИФРЫ КЛАВИАТУРЫ
     val numKeys: Array<IntArray> = arrayOf(
-        intArrayOf(850, 805),   // 0
-        intArrayOf(430, 460),   // 1
-        intArrayOf(850, 460),   // 2
-        intArrayOf(1275, 460),  // 3
-        intArrayOf(430, 575),   // 4
-        intArrayOf(850, 575),   // 5
-        intArrayOf(1276, 575),  // 6
-        intArrayOf(430, 690),   // 7
-        intArrayOf(850, 690),   // 8
-        intArrayOf(1275, 690)   // 9
+        intArrayOf(850, 805), intArrayOf(430, 460), intArrayOf(850, 460),
+        intArrayOf(1275, 460), intArrayOf(430, 575), intArrayOf(850, 575),
+        intArrayOf(1276, 575), intArrayOf(430, 690), intArrayOf(850, 690),
+        intArrayOf(1275, 690)
     ),
 ) {
     companion object {
@@ -117,6 +109,7 @@ data class Config(
             )
             return Config(
                 perebiv = p.getFloat("perebiv", 999f),
+                maxPrice = p.getFloat("maxPrice", 0f),
                 loopMs = p.getLong("loopMs", 10L),
                 delayZakaz = p.getLong("delayZakaz", 600L),
                 delayBefore = p.getLong("delayBefore", 400L),
@@ -125,7 +118,7 @@ data class Config(
                 delayKlava = p.getLong("delayKlava", 1500L),
                 delayOtmena = p.getLong("delayOtmena", 1500L),
                 zaprosRegion = rg("zaprosRegion", intArrayOf(1750, 165, 230, 50)),
-                lotRegion = rg("lotRegion", intArrayOf(1820, 490, 200, 60)),
+                lotRegion = rg("lotRegion", intArrayOf(1700, 470, 400, 70)),
                 btnZakaz = pt("btnZakaz", intArrayOf(2139, 186)),
                 priceField = pt("priceField", intArrayOf(990, 395)),
                 backspace = pt("backspace", intArrayOf(1690, 660)),
@@ -238,12 +231,12 @@ class ScreenReader(private val ctx: Context) {
             val pixelStride = plane.pixelStride
             val rowPadding = rowStride - pixelStride * width
 
-            val bmp = Bitmap.createBitmap(
+            val raw = Bitmap.createBitmap(
                 width + rowPadding / pixelStride, height, Bitmap.Config.ARGB_8888
             )
-            bmp.copyPixelsFromBuffer(buffer)
-            val cropped = Bitmap.createBitmap(bmp, 0, 0, width, height)
-            bmp.recycle()
+            raw.copyPixelsFromBuffer(buffer)
+            val cropped = Bitmap.createBitmap(raw, 0, 0, width, height)
+            raw.recycle()
             cropped
         } catch (t: Throwable) {
             null
@@ -267,18 +260,44 @@ class PriceOcr {
         val ch = h.coerceAtMost(frame.height - cy)
         if (cw <= 0 || ch <= 0) return null
 
+        // 1. кроп
         val crop = Bitmap.createBitmap(frame, cx, cy, cw, ch)
-        val scaled = Bitmap.createScaledBitmap(crop, cw * 4, ch * 4, true)
+        // 2. апскейл 6x
+        val sw = cw * 6
+        val sh = ch * 6
+        val scaled = Bitmap.createScaledBitmap(crop, sw, sh, true)
         crop.recycle()
+
+        // 3. бинаризация: светлый текст на тёмном фоне → чёрный текст на белом
+        try {
+            val pixels = IntArray(sw * sh)
+            scaled.getPixels(pixels, 0, sw, 0, 0, sw, sh)
+            for (i in pixels.indices) {
+                val p = pixels[i]
+                val r = (p shr 16) and 0xFF
+                val g = (p shr 8) and 0xFF
+                val b = p and 0xFF
+                val lum = (r * 299 + g * 587 + b * 114) / 1000
+                pixels[i] = if (lum > 170) 0xFF000000.toInt() else 0xFFFFFFFF.toInt()
+            }
+            scaled.setPixels(pixels, 0, sw, 0, 0, sw, sh)
+        } catch (_: Throwable) {
+            // если что-то пошло не так — работаем с небинаризованным
+        }
+
         val image = InputImage.fromBitmap(scaled, 0)
 
         return suspendCoroutine { cont ->
             recognizer.process(image)
                 .addOnSuccessListener { result ->
+                    try { scaled.recycle() } catch (_: Throwable) {}
                     val cleaned = result.text.replace(Regex("[^0-9.,]"), "").replace(',', '.')
                     cont.resume(cleaned.toFloatOrNull())
                 }
-                .addOnFailureListener { cont.resume(null) }
+                .addOnFailureListener {
+                    try { scaled.recycle() } catch (_: Throwable) {}
+                    cont.resume(null)
+                }
         }
     }
 }
@@ -345,6 +364,8 @@ class SniperService : Service() {
             log("Ошибка старта ScreenReader: ${t.message}")
             stopSelf(); return START_NOT_STICKY
         }
+        TradeState.running = true
+        TradeState.paused = false
         startLoop()
         return START_NOT_STICKY
     }
@@ -359,7 +380,9 @@ class SniperService : Service() {
     }
 
     override fun onDestroy() {
-        stopLoop(); scope.cancel(); screenReader.stop(); running = false
+        stopLoop(); scope.cancel(); screenReader.stop()
+        running = false
+        TradeState.running = false
         super.onDestroy()
     }
 
@@ -368,7 +391,7 @@ class SniperService : Service() {
     private fun startLoop() {
         if (loopJob?.isActive == true) return
         running = true
-        log("Скрипт запущен. Перебив +${cfg.perebiv}")
+        log("Скрипт запущен. Перебив +${cfg.perebiv}  Max=${cfg.maxPrice}")
         loopJob = scope.launch { try { snipeLoop() } catch (_: Throwable) {} }
     }
 
@@ -382,35 +405,60 @@ class SniperService : Service() {
         var cenaLota = 0f
         var lastRefresh = System.currentTimeMillis()
         var tick = 0
+        var lastPausedLog = false
 
         while (running) {
             tick++
+
+            if (TradeState.paused) {
+                if (!lastPausedLog) { log(">>> ПАУЗА"); lastPausedLog = true }
+                val f = screenReader.capture()
+                if (f != null) {
+                    val cur = ocr.readNumber(f, cfg.zaprosRegion)
+                    if (cur != null && cur > 0f) prevZapros = cur
+                    f.recycle()
+                }
+                delay(200); continue
+            } else if (lastPausedLog) {
+                log(">>> ПРОДОЛЖАЮ"); lastPausedLog = false
+            }
+
             val frame = screenReader.capture()
             if (frame == null) { delay(50); continue }
 
-            val lot = ocr.readNumber(frame, cfg.lotRegion)
-            if (lot != null && lot > 0f) cenaLota = lot
+            try {
+                val lot = ocr.readNumber(frame, cfg.lotRegion)
+                if (lot != null && lot > 0f) cenaLota = lot
 
-            val cur = ocr.readNumber(frame, cfg.zaprosRegion)
+                val cur = ocr.readNumber(frame, cfg.zaprosRegion)
 
-            if (tick % 10 == 0) {
-                log("tick=$tick cur=$cur lot=$lot prev=$prevZapros cenaLota=$cenaLota")
-            }
+                if (tick % 10 == 0) {
+                    log("tick=$tick cur=$cur lot=$lot prev=$prevZapros cenaLota=$cenaLota")
+                }
 
-            if (cur != null && cur > 0f) {
-                val newZapros = cur + cfg.perebiv
-                if (cur > prevZapros && prevZapros > 0f && newZapros < cenaLota) {
-                    log(">>> SNIPE new=$newZapros")
-                    doSnipe(newZapros)
+                if (cur != null && cur > 0f) {
+                    val newZapros = cur + cfg.perebiv
+                    if (cur > prevZapros && prevZapros > 0f && newZapros < cenaLota) {
+                        // защита по макс. цене
+                        if (cfg.maxPrice > 0f && newZapros > cfg.maxPrice) {
+                            log(">>> пропуск: new=$newZapros > max=${cfg.maxPrice}")
+                        } else {
+                            log(">>> SNIPE new=$newZapros")
+                            doSnipe(newZapros)
+                            lastRefresh = System.currentTimeMillis()
+                        }
+                    }
+                    prevZapros = cur
+                }
+
+                if (System.currentTimeMillis() - lastRefresh > 5000) {
+                    prevZapros = 0f
                     lastRefresh = System.currentTimeMillis()
                 }
-                prevZapros = cur
+            } finally {
+                try { frame.recycle() } catch (_: Throwable) {}
             }
 
-            if (System.currentTimeMillis() - lastRefresh > 5000) {
-                prevZapros = 0f
-                lastRefresh = System.currentTimeMillis()
-            }
             delay(cfg.loopMs)
         }
     }
@@ -419,13 +467,22 @@ class SniperService : Service() {
         val tap = TapService.instance
         if (tap == null) { log("TapService не подключён"); return }
 
+        // 1. открыть окно заказа
         tap.tapAndWait(cfg.btnZakaz[0], cfg.btnZakaz[1], cfg.delayZakaz)
+        // 2. тап по полю цены (открыть клавиатуру)
         tap.tapAndWait(cfg.priceField[0], cfg.priceField[1], cfg.delayBefore)
+        // 3. стереть старое
         repeat(8) { tap.tapAndWait(cfg.backspace[0], cfg.backspace[1], cfg.delayInput) }
+        // 4. ввести цифры
         inputNumber(tap, newZapros.toString())
+        // 5. галочка
         tap.tapAndWait(cfg.btnGalochka[0], cfg.btnGalochka[1], cfg.delayAfter)
+        // 6. выставить ордер
         tap.tapAndWait(cfg.btnVtoroyZakaz[0], cfg.btnVtoroyZakaz[1], cfg.delayKlava)
+        // 7. закрыть окно
         tap.tapAndWait(cfg.btnOtmena[0], cfg.btnOtmena[1], cfg.delayOtmena)
+
+        log(">>> ордер выставлен на $newZapros")
     }
 
     private suspend fun inputNumber(tap: TapService, s: String) {
@@ -516,6 +573,8 @@ class MainActivity : AppCompatActivity() {
 
         btnStop.setOnClickListener {
             startService(Intent(this, SniperService::class.java).apply { action = SniperService.ACTION_STOP })
+            try { startService(Intent(this, FloatingButtonService::class.java).apply { action = "stop" }) } catch (_: Throwable) {}
+            TradeState.running = false
             updateButtons(false)
         }
 
@@ -554,6 +613,13 @@ class MainActivity : AppCompatActivity() {
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(i)
         else startService(i)
+
+        try {
+            val fb = Intent(this, FloatingButtonService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(fb)
+            else startService(fb)
+        } catch (_: Throwable) {}
+
         updateButtons(true)
     }
 
@@ -610,6 +676,7 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         findViewById<EditText>(R.id.etPerebiv).setText(cfg.perebiv.toString())
+        findViewById<EditText>(R.id.etMaxPrice).setText(cfg.maxPrice.toString())
         findViewById<EditText>(R.id.etLoopMs).setText(cfg.loopMs.toString())
         findViewById<Button>(R.id.btnSave).setOnClickListener { save() }
     }
@@ -665,8 +732,10 @@ class SettingsActivity : AppCompatActivity() {
         saveRegion(p, "zaprosRegion", R.id.etZapros)
         saveRegion(p, "lotRegion", R.id.etLot)
         val perebiv = findViewById<EditText>(R.id.etPerebiv).text.toString().toFloatOrNull() ?: 999f
+        val maxP = findViewById<EditText>(R.id.etMaxPrice).text.toString().toFloatOrNull() ?: 0f
         val loop = findViewById<EditText>(R.id.etLoopMs).text.toString().toLongOrNull() ?: 10L
         p.putFloat("perebiv", perebiv)
+        p.putFloat("maxPrice", maxP)
         p.putLong("loopMs", loop)
         p.apply()
         Toast.makeText(this, "Сохранено", Toast.LENGTH_SHORT).show()
