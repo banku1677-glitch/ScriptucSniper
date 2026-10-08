@@ -79,7 +79,7 @@ class FloatingButtonService : Service() {
             @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE
 
         val v = FloatingView(this)
-        val p = WindowManager.LayoutParams(
+        var p = WindowManager.LayoutParams(
             WIDTH, HEIGHT, overlayType,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
             PixelFormat.TRANSLUCENT
@@ -121,7 +121,7 @@ class FloatingButtonService : Service() {
                     if (moved) {
                         // перетаскивание — игнор
                     } else if (dur > 700) {
-                        // долгое нажатие = свернуть/развернуть
+                        // долгое нажатие = свернуть / развернуть
                         v.minimized = !v.minimized
                         val newW = if (v.minimized) MIN_SIZE else WIDTH
                         val newH = if (v.minimized) MIN_SIZE else HEIGHT
@@ -134,9 +134,9 @@ class FloatingButtonService : Service() {
                             x = p.x.coerceIn(0, screenW - newW)
                             y = p.y.coerceIn(0, screenH - newH)
                         }
-                        try { w.updateViewLayout(v, newP) } catch (_: Throwable) {}
-                        // заменяем ссылку на актуальный layout params
-                        p.x = newP.x; p.y = newP.y
+                        // ВАЖНО: переприсваиваем p на новый layout params
+                        p = newP
+                        try { w.updateViewLayout(v, p) } catch (_: Throwable) {}
                         v.invalidate()
                     } else {
                         // короткий тап = пауза/продолжить
@@ -167,27 +167,26 @@ class FloatingView(ctx: Context) : View(ctx) {
     private val gray = Color.parseColor("#4A4038")
 
     private val pFill = Paint().apply {
-        isAntiAlias = true
-        style = Paint.Style.FILL
+        isAntiAlias = true; style = Paint.Style.FILL
     }
     private val pStroke = Paint().apply {
-        isAntiAlias = true
-        strokeWidth = 6f
-        style = Paint.Style.STROKE
+        isAntiAlias = true; strokeWidth = 6f; style = Paint.Style.STROKE
     }
     private val pStrokeThin = Paint().apply {
-        isAntiAlias = true
-        strokeWidth = 3f
-        style = Paint.Style.STROKE
+        isAntiAlias = true; strokeWidth = 3f; style = Paint.Style.STROKE
     }
     private val pText = Paint().apply {
-        isAntiAlias = true
-        textAlign = Paint.Align.CENTER
+        isAntiAlias = true; textAlign = Paint.Align.CENTER
         typeface = android.graphics.Typeface.DEFAULT_BOLD
     }
     private val pDot = Paint().apply {
-        isAntiAlias = true
-        style = Paint.Style.FILL
+        isAntiAlias = true; style = Paint.Style.FILL
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        // авто-перерисовка каждые 500мс — чтобы статус был актуален
+        postInvalidateDelayed(500)
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -204,45 +203,47 @@ class FloatingView(ctx: Context) : View(ctx) {
             canvas.drawRoundRect(rect, radius, radius, pStroke)
             pDot.color = if (TradeState.running && !TradeState.paused) redEye else gray
             canvas.drawCircle(width / 2f, height / 2f, width * 0.22f, pDot)
-            return
+        } else {
+            pFill.color = black
+            canvas.drawRoundRect(rect, radius, radius, pFill)
+
+            val isActive = TradeState.running && !TradeState.paused
+            val isPaused = TradeState.running && TradeState.paused
+
+            val mainColor = when {
+                isActive -> goldBright
+                isPaused -> gold
+                else -> gray
+            }
+            pStroke.color = mainColor
+            canvas.drawRoundRect(rect, radius, radius, pStroke)
+
+            val innerRect = RectF(pad + 6f, pad + 6f, width - pad - 6f, height - pad - 6f)
+            pStrokeThin.color = mainColor
+            pStrokeThin.alpha = 120
+            canvas.drawRoundRect(innerRect, radius - 6f, radius - 6f, pStrokeThin)
+            pStrokeThin.alpha = 255
+
+            val label = when {
+                isActive -> "ON"
+                isPaused -> "OFF"
+                else -> "—"
+            }
+            pText.color = mainColor
+            pText.textSize = height * 0.42f
+            canvas.drawText(label, width / 2f, height / 2f + pText.textSize * 0.35f, pText)
+
+            if (isActive) {
+                pDot.color = redEye
+                val cx = width - radius + 6f
+                val cy = radius - 6f
+                canvas.drawCircle(cx, cy, radius * 0.32f, pDot)
+                pDot.color = Color.WHITE
+                canvas.drawCircle(cx - 2f, cy - 2f, radius * 0.1f, pDot)
+            }
         }
 
-        pFill.color = black
-        canvas.drawRoundRect(rect, radius, radius, pFill)
-
-        val isActive = TradeState.running && !TradeState.paused
-        val isPaused = TradeState.running && TradeState.paused
-
-        val mainColor = when {
-            isActive -> goldBright
-            isPaused -> gold
-            else -> gray
-        }
-        pStroke.color = mainColor
-        canvas.drawRoundRect(rect, radius, radius, pStroke)
-
-        val innerRect = RectF(pad + 6f, pad + 6f, width - pad - 6f, height - pad - 6f)
-        pStrokeThin.color = mainColor
-        pStrokeThin.alpha = 120
-        canvas.drawRoundRect(innerRect, radius - 6f, radius - 6f, pStrokeThin)
-        pStrokeThin.alpha = 255
-
-        val label = when {
-            isActive -> "ON"
-            isPaused -> "OFF"
-            else -> "—"
-        }
-        pText.color = mainColor
-        pText.textSize = height * 0.42f
-        canvas.drawText(label, width / 2f, height / 2f + pText.textSize * 0.35f, pText)
-
-        if (isActive) {
-            pDot.color = redEye
-            val cx = width - radius + 6f
-            val cy = radius - 6f
-            canvas.drawCircle(cx, cy, radius * 0.32f, pDot)
-            pDot.color = Color.WHITE
-            canvas.drawCircle(cx - 2f, cy - 2f, radius * 0.1f, pDot)
-        }
+        // перерисоваться снова через 500мс
+        postInvalidateDelayed(500)
     }
 }
