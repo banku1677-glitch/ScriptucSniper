@@ -30,6 +30,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.provider.Settings
+import android.util.DisplayMetrics
 import android.view.MotionEvent
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
@@ -65,36 +66,25 @@ data class Config(
     val delayInput: Long = 10L,
     val delayKlava: Long = 1200L,
     val delayOtmena: Long = 1200L,
-
     val zaprosRegion: IntArray = intArrayOf(1764, 187, 145, 27),
     val lotRegion: IntArray = intArrayOf(1133, 386, 253, 75),
-
     val btnZakaz: IntArray = intArrayOf(2111, 183),
     val btnVtoroyZakaz: IntArray = intArrayOf(1880, 189),
     val btnNazad: IntArray = intArrayOf(1740, 263),
     val btnOtmena: IntArray = intArrayOf(1730, 282),
     val btnGalochka: IntArray = intArrayOf(1944, 912),
     val btnTochka: IntArray = intArrayOf(1419, 972),
-
     val numKeys: Array<IntArray> = arrayOf(
-        intArrayOf(929, 894),
-        intArrayOf(449, 559),
-        intArrayOf(941, 571),
-        intArrayOf(1401, 560),
-        intArrayOf(414, 682),
-        intArrayOf(938, 669),
-        intArrayOf(1427, 651),
-        intArrayOf(414, 795),
-        intArrayOf(934, 788),
+        intArrayOf(929, 894), intArrayOf(449, 559), intArrayOf(941, 571),
+        intArrayOf(1401, 560), intArrayOf(414, 682), intArrayOf(938, 669),
+        intArrayOf(1427, 651), intArrayOf(414, 795), intArrayOf(934, 788),
         intArrayOf(1398, 810)
     ),
 ) {
     companion object {
         const val PREF = "scriptuc_cfg"
-
         fun load(ctx: Context): Config {
             val p = ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE)
-
             fun pt(key: String, def: IntArray): IntArray {
                 val s = p.getString(key, null) ?: return def
                 val a = s.split(",").mapNotNull { it.trim().toIntOrNull() }
@@ -105,15 +95,12 @@ data class Config(
                 val a = s.split(",").mapNotNull { it.trim().toIntOrNull() }
                 return if (a.size == 4) a.toIntArray() else def
             }
-
-            val defaultNumKeys = arrayOf(
+            val defNum = arrayOf(
                 intArrayOf(929, 894), intArrayOf(449, 559), intArrayOf(941, 571),
                 intArrayOf(1401, 560), intArrayOf(414, 682), intArrayOf(938, 669),
                 intArrayOf(1427, 651), intArrayOf(414, 795), intArrayOf(934, 788),
                 intArrayOf(1398, 810)
             )
-            val loadedNumKeys = Array(10) { i -> pt("num$i", defaultNumKeys[i]) }
-
             return Config(
                 perebiv = p.getFloat("perebiv", 0.01f),
                 loopMs = p.getLong("loopMs", 10L),
@@ -131,7 +118,7 @@ data class Config(
                 btnOtmena = pt("btnOtmena", intArrayOf(1730, 282)),
                 btnGalochka = pt("btnGalochka", intArrayOf(1944, 912)),
                 btnTochka = pt("btnTochka", intArrayOf(1419, 972)),
-                numKeys = loadedNumKeys,
+                numKeys = Array(10) { i -> pt("num$i", defNum[i]) },
             )
         }
     }
@@ -143,23 +130,12 @@ object RegionPickState {
 }
 
 class TapService : AccessibilityService() {
-
     companion object {
-        @Volatile
-        var instance: TapService? = null
+        @Volatile var instance: TapService? = null
             private set
     }
-
-    override fun onServiceConnected() {
-        super.onServiceConnected()
-        instance = this
-    }
-
-    override fun onDestroy() {
-        instance = null
-        super.onDestroy()
-    }
-
+    override fun onServiceConnected() { super.onServiceConnected(); instance = this }
+    override fun onDestroy() { instance = null; super.onDestroy() }
     override fun onAccessibilityEvent(event: AccessibilityEvent?) = Unit
     override fun onInterrupt() = Unit
 
@@ -170,9 +146,9 @@ class TapService : AccessibilityService() {
         return dispatchGesture(gesture, null, null)
     }
 
-    fun tapAndWait(x: Int, y: Int, waitMs: Long) {
+    suspend fun tapAndWait(x: Int, y: Int, waitMs: Long) {
         tap(x, y)
-        Thread.sleep(waitMs)
+        delay(waitMs)
     }
 }
 
@@ -196,22 +172,19 @@ class ScreenReader(private val ctx: Context) {
     fun start(resultCode: Int, data: Intent) {
         val mgr = ctx.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         val proj = mgr.getMediaProjection(resultCode, data)
-
         proj.registerCallback(projectionCallback, Handler(Looper.getMainLooper()))
         projection = proj
 
         val wm = ctx.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        val bounds = wm.currentWindowMetrics.bounds
-
-        val screenW = maxOf(bounds.width(), bounds.height())
-        val screenH = minOf(bounds.width(), bounds.height())
+        val (sw, sh) = getScreenSize(wm)
+        val screenW = maxOf(sw, sh)
+        val screenH = minOf(sw, sh)
 
         width = screenW / 2
         height = screenH / 2
         dpi = ctx.resources.displayMetrics.densityDpi / 2
 
         imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 3)
-
         virtualDisplay = proj.createVirtualDisplay(
             "scriptuc-capture",
             width, height, dpi,
@@ -220,14 +193,24 @@ class ScreenReader(private val ctx: Context) {
         )
     }
 
+    private fun getScreenSize(wm: WindowManager): Pair<Int, Int> {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val b = wm.currentWindowMetrics.bounds
+            b.width() to b.height()
+        } else {
+            val dm = DisplayMetrics()
+            @Suppress("DEPRECATION")
+            wm.defaultDisplay.getRealMetrics(dm)
+            dm.widthPixels to dm.heightPixels
+        }
+    }
+
     fun stop() {
         try { projection?.unregisterCallback(projectionCallback) } catch (_: Throwable) {}
         try { virtualDisplay?.release() } catch (_: Throwable) {}
         try { imageReader?.close() } catch (_: Throwable) {}
         try { projection?.stop() } catch (_: Throwable) {}
-        virtualDisplay = null
-        imageReader = null
-        projection = null
+        virtualDisplay = null; imageReader = null; projection = null
     }
 
     suspend fun capture(): Bitmap? = withContext(Dispatchers.IO) {
@@ -237,12 +220,11 @@ class ScreenReader(private val ctx: Context) {
         while (System.currentTimeMillis() < deadline) {
             image = try { reader.acquireLatestImage() } catch (_: Throwable) { null }
             if (image != null) break
-            Thread.sleep(5)
+            delay(5)
         }
-        if (image == null) return@withContext null
-
+        val img = image ?: return@withContext null
         try {
-            val plane = image.planes[0]
+            val plane = img.planes[0]
             val buffer = plane.buffer
             val rowStride = plane.rowStride
             val pixelStride = plane.pixelStride
@@ -258,13 +240,12 @@ class ScreenReader(private val ctx: Context) {
         } catch (t: Throwable) {
             null
         } finally {
-            image.close()
+            img.close()
         }
     }
 }
 
 class PriceOcr {
-
     private val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
 
     suspend fun readNumber(frame: Bitmap, region: IntArray): Float? {
@@ -287,8 +268,7 @@ class PriceOcr {
         return suspendCoroutine { cont ->
             recognizer.process(image)
                 .addOnSuccessListener { result ->
-                    val raw = result.text
-                    val cleaned = raw.replace(Regex("[^0-9.,]"), "").replace(',', '.')
+                    val cleaned = result.text.replace(Regex("[^0-9.,]"), "").replace(',', '.')
                     cont.resume(cleaned.toFloatOrNull())
                 }
                 .addOnFailureListener { cont.resume(null) }
@@ -306,10 +286,8 @@ class SniperService : Service() {
         const val CHANNEL_ID = "sniper"
         const val NOTIF_ID = 42
 
-        @Volatile
-        var running: Boolean = false
+        @Volatile var running: Boolean = false
             private set
-
         var logSink: ((String) -> Unit)? = null
     }
 
@@ -321,7 +299,6 @@ class SniperService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-
         Thread.setDefaultUncaughtExceptionHandler { _, t ->
             try {
                 val sw = java.io.StringWriter()
@@ -333,7 +310,6 @@ class SniperService : Service() {
             android.util.Log.e("ScriptucCrash", "FATAL", t)
             android.os.Process.killProcess(android.os.Process.myPid())
         }
-
         cfg = Config.load(this)
         screenReader = ScreenReader(this)
         ocr = PriceOcr()
@@ -341,61 +317,42 @@ class SniperService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
-            ACTION_STOP -> {
-                stopLoop()
-                stopSelf()
-                return START_NOT_STICKY
-            }
-            else -> {
-                if (intent == null) {
-                    stopSelf()
-                    return START_NOT_STICKY
-                }
-                val rc = intent.getIntExtra(EXTRA_RESULT_CODE, 0)
-                @Suppress("DEPRECATION")
-                val data: Intent? = intent.getParcelableExtra(EXTRA_DATA)
-                if (data == null) {
-                    startForegroundCompat()
-                    log("Нет данных MediaProjection — стоп")
-                    stopForeground(STOP_FOREGROUND_REMOVE)
-                    stopSelf()
-                    return START_NOT_STICKY
-                }
-
-                startForegroundCompat()
-                try {
-                    screenReader.start(rc, data)
-                    log(">>> ScreenReader стартовал")
-                } catch (t: Throwable) {
-                    log("Ошибка старта ScreenReader: ${t.message}")
-                    stopSelf()
-                    return START_NOT_STICKY
-                }
-                startLoop()
-            }
+        if (intent?.action == ACTION_STOP) {
+            stopLoop(); stopSelf(); return START_NOT_STICKY
         }
+        if (intent == null) { stopSelf(); return START_NOT_STICKY }
+        val rc = intent.getIntExtra(EXTRA_RESULT_CODE, 0)
+        @Suppress("DEPRECATION")
+        val data: Intent? = intent.getParcelableExtra(EXTRA_DATA)
+        if (data == null) {
+            startForegroundCompat()
+            log("Нет данных MediaProjection — стоп")
+            stopForeground(STOP_FOREGROUND_REMOVE); stopSelf()
+            return START_NOT_STICKY
+        }
+        startForegroundCompat()
+        try {
+            screenReader.start(rc, data)
+            log(">>> ScreenReader стартовал")
+        } catch (t: Throwable) {
+            log("Ошибка старта ScreenReader: ${t.message}")
+            stopSelf(); return START_NOT_STICKY
+        }
+        startLoop()
         return START_NOT_STICKY
     }
 
     private fun startForegroundCompat() {
         val notif = buildNotification()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(
-                NOTIF_ID,
-                notif,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
-            )
+            startForeground(NOTIF_ID, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION)
         } else {
             startForeground(NOTIF_ID, notif)
         }
     }
 
     override fun onDestroy() {
-        stopLoop()
-        scope.cancel()
-        screenReader.stop()
-        running = false
+        stopLoop(); scope.cancel(); screenReader.stop(); running = false
         super.onDestroy()
     }
 
@@ -405,15 +362,11 @@ class SniperService : Service() {
         if (loopJob?.isActive == true) return
         running = true
         log("Скрипт запущен. Перебив +${cfg.perebiv}")
-        loopJob = scope.launch {
-            try { snipeLoop() } catch (_: Throwable) {}
-        }
+        loopJob = scope.launch { try { snipeLoop() } catch (_: Throwable) {} }
     }
 
     private fun stopLoop() {
-        loopJob?.cancel()
-        loopJob = null
-        running = false
+        loopJob?.cancel(); loopJob = null; running = false
         log("Скрипт остановлен.")
     }
 
@@ -425,10 +378,11 @@ class SniperService : Service() {
 
         while (running) {
             tick++
-            val frame = screenReader.capture() ?: run {
+            val frame = screenReader.capture()
+            if (frame == null) {
                 if (tick % 10 == 0) log("tick=$tick нет кадров")
-                delay(50); return@run null
-            } ?: continue
+                delay(50); continue
+            }
 
             val lot = ocr.readNumber(frame, cfg.lotRegion)
             if (lot != null && lot > 0f) cenaLota = lot
@@ -453,26 +407,22 @@ class SniperService : Service() {
                 prevZapros = 0f
                 lastRefresh = System.currentTimeMillis()
             }
-
             delay(cfg.loopMs)
         }
     }
 
-    private fun doSnipe(newZapros: Float) {
+    private suspend fun doSnipe(newZapros: Float) {
         val tap = TapService.instance
-        if (tap == null) {
-            log("TapService не подключён")
-            return
-        }
+        if (tap == null) { log("TapService не подключён"); return }
         tap.tapAndWait(cfg.btnZakaz[0], cfg.btnZakaz[1], cfg.delayZakaz)
         inputNumber(tap, newZapros.toString())
-        Thread.sleep(cfg.delayBefore)
+        delay(cfg.delayBefore)
         tap.tapAndWait(cfg.btnGalochka[0], cfg.btnGalochka[1], cfg.delayAfter)
         tap.tapAndWait(cfg.btnVtoroyZakaz[0], cfg.btnVtoroyZakaz[1], cfg.delayKlava)
         tap.tapAndWait(cfg.btnOtmena[0], cfg.btnOtmena[1], cfg.delayOtmena)
     }
 
-    private fun inputNumber(tap: TapService, s: String) {
+    private suspend fun inputNumber(tap: TapService, s: String) {
         for (ch in s) {
             when {
                 ch == '.' || ch == ',' -> tap.tapAndWait(cfg.btnTochka[0], cfg.btnTochka[1], cfg.delayInput)
@@ -492,19 +442,16 @@ class SniperService : Service() {
         }
     }
 
-    private fun buildNotification(): Notification {
-        return NotificationCompat.Builder(this, CHANNEL_ID)
+    private fun buildNotification(): Notification =
+        NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Scriptuc Sniper")
             .setContentText("Работает")
             .setSmallIcon(android.R.drawable.ic_menu_compass)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
-    }
 
-    private fun log(msg: String) {
-        logSink?.invoke(msg)
-    }
+    private fun log(msg: String) { logSink?.invoke(msg) }
 }
 
 class MainActivity : AppCompatActivity() {
@@ -517,11 +464,8 @@ class MainActivity : AppCompatActivity() {
         ActivityResultContracts.StartActivityForResult()
     ) { res ->
         appendLog(">>> callback: rc=${res.resultCode} data=${res.data != null}")
-        if (res.data != null) {
-            startSniperService(res.resultCode, res.data!!)
-        } else {
-            appendLog("MediaProjection отклонён")
-        }
+        if (res.data != null) startSniperService(res.resultCode, res.data!!)
+        else appendLog("MediaProjection отклонён")
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -550,12 +494,8 @@ class MainActivity : AppCompatActivity() {
                 if (f.exists()) {
                     appendLog("=== crash.txt ===")
                     appendLog(f.readText().takeLast(2000))
-                } else {
-                    appendLog("crash.txt нет")
-                }
-            } catch (t: Throwable) {
-                appendLog("crash.txt ошибка: ${t.message}")
-            }
+                } else appendLog("crash.txt нет")
+            } catch (t: Throwable) { appendLog("crash.txt ошибка: ${t.message}") }
         }
 
         btnStart.setOnClickListener {
@@ -569,9 +509,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnStop.setOnClickListener {
-            startService(Intent(this, SniperService::class.java).apply {
-                action = SniperService.ACTION_STOP
-            })
+            startService(Intent(this, SniperService::class.java).apply { action = SniperService.ACTION_STOP })
             updateButtons(false)
         }
 
@@ -587,7 +525,6 @@ class MainActivity : AppCompatActivity() {
                 ))
             }
         }
-
         updateButtons(SniperService.running)
     }
 
@@ -600,9 +537,7 @@ class MainActivity : AppCompatActivity() {
         try {
             val mgr = getSystemService(MediaProjectionManager::class.java)
             projectionLauncher.launch(mgr.createScreenCaptureIntent())
-        } catch (t: Throwable) {
-            appendLog(">>> ОШИБКА: ${t.message}")
-        }
+        } catch (t: Throwable) { appendLog(">>> ОШИБКА: ${t.message}") }
     }
 
     private fun startSniperService(resultCode: Int, data: Intent) {
@@ -621,9 +556,7 @@ class MainActivity : AppCompatActivity() {
         btnStop.isEnabled = running
     }
 
-    private fun appendLog(line: String) {
-        tvLog.append(line + "\n")
-    }
+    private fun appendLog(line: String) { tvLog.append(line + "\n") }
 }
 
 class SettingsActivity : AppCompatActivity() {
@@ -659,16 +592,13 @@ class SettingsActivity : AppCompatActivity() {
             row.findViewById<TextView>(R.id.tvNum).text = "$i:"
             val et = row.findViewById<EditText>(R.id.etNum)
             et.setText(cfg.numKeys[i].joinToString(","))
-            row.findViewById<Button>(R.id.btnPickNum).setOnClickListener {
-                startPointPick("num$i")
-            }
+            row.findViewById<Button>(R.id.btnPickNum).setOnClickListener { startPointPick("num$i") }
             cont.addView(row)
             numFields[i] = et
         }
 
         findViewById<EditText>(R.id.etPerebiv).setText(cfg.perebiv.toString())
         findViewById<EditText>(R.id.etLoopMs).setText(cfg.loopMs.toString())
-
         findViewById<Button>(R.id.btnSave).setOnClickListener { save() }
     }
 
@@ -678,11 +608,14 @@ class SettingsActivity : AppCompatActivity() {
         CalibResult.onResult = { _, x, y ->
             runOnUiThread {
                 if (RegionPickState.x1 < 0) {
+                    // первый тап
                     RegionPickState.x1 = x
                     RegionPickState.y1 = y
                     Toast.makeText(this, "Первый угол: $x,$y — веди крестик на второй", Toast.LENGTH_LONG).show()
+                    // перезапускаем оверлей для второго тапа
                     launchCalibOverlay(key)
                 } else {
+                    // второй тап
                     val rx = minOf(RegionPickState.x1, x)
                     val ry = minOf(RegionPickState.y1, y)
                     val rw = kotlin.math.abs(x - RegionPickState.x1)
@@ -692,6 +625,7 @@ class SettingsActivity : AppCompatActivity() {
                     RegionPickState.x1 = -1
                     RegionPickState.y1 = -1
                     CalibResult.onResult = null
+                    stopCalibService()
                 }
             }
         }
@@ -704,9 +638,15 @@ class SettingsActivity : AppCompatActivity() {
                 setTargetValue(k, x, y)
                 Toast.makeText(this, "$k = $x, $y", Toast.LENGTH_SHORT).show()
                 CalibResult.onResult = null
+                stopCalibService()
             }
         }
         launchCalibOverlay(key)
+    }
+
+    private fun stopCalibService() {
+        val i = Intent(this, CalibrationService::class.java).apply { action = "stop" }
+        try { startService(i) } catch (_: Throwable) {}
     }
 
     private fun bindPoint(key: String, etId: Int, btnId: Int, value: IntArray) {
@@ -749,30 +689,25 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun save() {
         val p = getSharedPreferences(Config.PREF, MODE_PRIVATE).edit()
-
         savePoint(p, "btnZakaz", R.id.etBtnZakaz)
         savePoint(p, "btnVtoroyZakaz", R.id.etBtnVtoroy)
         savePoint(p, "btnNazad", R.id.etBtnNazad)
         savePoint(p, "btnOtmena", R.id.etBtnOtmena)
         savePoint(p, "btnGalochka", R.id.etBtnGalochka)
         savePoint(p, "btnTochka", R.id.etBtnTochka)
-
         for (i in 0..9) {
             numFields[i]?.text?.toString()?.let { v ->
                 val a = v.split(",").mapNotNull { it.trim().toIntOrNull() }
                 if (a.size == 2) p.putString("num$i", "${a[0]},${a[1]}")
             }
         }
-
         saveRegion(p, "zaprosRegion", R.id.etZapros)
         saveRegion(p, "lotRegion", R.id.etLot)
-
         val perebiv = findViewById<EditText>(R.id.etPerebiv).text.toString().toFloatOrNull() ?: 0.01f
         val loop = findViewById<EditText>(R.id.etLoopMs).text.toString().toLongOrNull() ?: 10L
         p.putFloat("perebiv", perebiv)
         p.putLong("loopMs", loop)
         p.apply()
-
         Toast.makeText(this, "Сохранено", Toast.LENGTH_SHORT).show()
     }
 
@@ -790,13 +725,10 @@ class SettingsActivity : AppCompatActivity() {
 }
 
 class PickerActivity : Activity() {
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         val root = FrameLayout(this)
         root.setBackgroundColor(Color.argb(110, 30, 10, 60))
-
         val hint = TextView(this).apply {
             text = "Тапни по нужному элементу"
             setTextColor(Color.parseColor("#C89BFF"))
@@ -808,7 +740,6 @@ class PickerActivity : Activity() {
             FrameLayout.LayoutParams.WRAP_CONTENT,
             FrameLayout.LayoutParams.WRAP_CONTENT
         ).apply { topMargin = 80; leftMargin = 40 })
-
         root.setOnTouchListener { _, ev ->
             if (ev.action == MotionEvent.ACTION_DOWN) {
                 val out = Intent().apply {
@@ -820,7 +751,6 @@ class PickerActivity : Activity() {
                 true
             } else false
         }
-
         setContentView(root)
     }
 }
