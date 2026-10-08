@@ -52,7 +52,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.withContext
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 
@@ -197,11 +197,13 @@ class ScreenReader(private val ctx: Context) {
 
         val wm = ctx.getSystemService(Context.WINDOW_SERVICE) as WindowManager
         val bounds = wm.currentWindowMetrics.bounds
-        width = bounds.width()
-        height = bounds.height()
-        dpi = ctx.resources.displayMetrics.densityDpi
+        // захватываем в половину разрешения — быстрее и меньше памяти,
+        // OCR всё равно апскейлит кроп
+        width = bounds.width() / 2
+        height = bounds.height() / 2
+        dpi = ctx.resources.displayMetrics.densityDpi / 2
 
-        imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
+        imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 3)
 
         virtualDisplay = proj.createVirtualDisplay(
             "scriptuc-capture",
@@ -221,44 +223,36 @@ class ScreenReader(private val ctx: Context) {
         projection = null
     }
 
-    suspend fun capture(): Bitmap? = withTimeoutOrNull(500L) {
-        suspendCoroutine { cont ->
-            val reader = imageReader
-            if (reader == null) {
-                cont.resume(null)
-                return@suspendCoroutine
-            }
-            reader.setOnImageAvailableListener({ r ->
-                var image: Image? = null
-                var bmp: Bitmap? = null
-                var cropped: Bitmap? = null
-                try {
-                    image = r.acquireLatestImage()
-                    if (image == null) {
-                        cont.resume(null)
-                        return@setOnImageAvailableListener
-                    }
-                    val plane = image.planes[0]
-                    val buffer = plane.buffer
-                    val rowStride = plane.rowStride
-                    val pixelStride = plane.pixelStride
-                    val rowPadding = rowStride - pixelStride * width
+    // синхронный polling acquireLatestImage, без listener и suspendCoroutine
+    suspend fun capture(): Bitmap? = withContext(Dispatchers.IO) {
+        val reader = imageReader ?: return@withContext null
+        val deadline = System.currentTimeMillis() + 500L
+        var image: Image? = null
+        while (System.currentTimeMillis() < deadline) {
+            image = try { reader.acquireLatestImage() } catch (_: Throwable) { null }
+            if (image != null) break
+            Thread.sleep(5)
+        }
+        if (image == null) return@withContext null
 
-                    bmp = Bitmap.createBitmap(
-                        width + rowPadding / pixelStride, height, Bitmap.Config.ARGB_8888
-                    )
-                    bmp.copyPixelsFromBuffer(buffer)
-                    cropped = Bitmap.createBitmap(bmp, 0, 0, width, height)
-                    cont.resume(cropped)
-                } catch (t: Throwable) {
-                    try { cropped?.recycle() } catch (_: Throwable) {}
-                    cont.resume(null)
-                } finally {
-                    try { bmp?.recycle() } catch (_: Throwable) {}
-                    image?.close()
-                    r.setOnImageAvailableListener(null, null)
-                }
-            }, Handler(Looper.getMainLooper()))
+        try {
+            val plane = image.planes[0]
+            val buffer = plane.buffer
+            val rowStride = plane.rowStride
+            val pixelStride = plane.pixelStride
+            val rowPadding = rowStride - pixelStride * width
+
+            val bmp = Bitmap.createBitmap(
+                width + rowPadding / pixelStride, height, Bitmap.Config.ARGB_8888
+            )
+            bmp.copyPixelsFromBuffer(buffer)
+            val cropped = Bitmap.createBitmap(bmp, 0, 0, width, height)
+            bmp.recycle()
+            cropped
+        } catch (t: Throwable) {
+            null
+        } finally {
+            image.close()
         }
     }
 }
@@ -267,8 +261,14 @@ class PriceOcr {
 
     private val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
 
+    // region приходит в координатах ПОЛНОГО экрана.
+    // кадр в половинном разрешении → делим x,y,w,h на 2 перед кропом.
     suspend fun readNumber(frame: Bitmap, region: IntArray): Float? {
-        val x = region[0]; val y = region[1]; val w = region[2]; val h = region[3]
+        val scale = 2
+        val x = region[0] / scale
+        val y = region[1] / scale
+        val w = region[2] / scale
+        val h = region[3] / scale
         val cx = x.coerceIn(0, frame.width - 1)
         val cy = y.coerceIn(0, frame.height - 1)
         val cw = w.coerceAtMost(frame.width - cx)
@@ -276,7 +276,8 @@ class PriceOcr {
         if (cw <= 0 || ch <= 0) return null
 
         val crop = Bitmap.createBitmap(frame, cx, cy, cw, ch)
-        val scaled = Bitmap.createScaledBitmap(crop, cw * 3, ch * 3, true)
+        val scaled = Bitmap.createScaledBitmap(crop, cw * 4, ch * 4, true)
+        crop.recycle()
         val image = InputImage.fromBitmap(scaled, 0)
 
         return suspendCoroutine { cont ->
