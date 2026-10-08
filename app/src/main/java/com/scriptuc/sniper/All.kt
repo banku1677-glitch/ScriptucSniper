@@ -369,13 +369,6 @@ class SniperService : Service() {
                     log(">>> ScreenReader стартовал")
                 } catch (t: Throwable) {
                     log("Ошибка старта ScreenReader: ${t.message}")
-                    try {
-                        val sw = java.io.StringWriter()
-                        t.printStackTrace(java.io.PrintWriter(sw))
-                        java.io.File(filesDir, "crash.txt").appendText(
-                            "\n\n=== ScreenReader.start ${System.currentTimeMillis()} ===\n" + sw.toString()
-                        )
-                    } catch (_: Throwable) {}
                     stopSelf()
                     return START_NOT_STICKY
                 }
