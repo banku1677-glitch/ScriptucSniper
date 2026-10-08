@@ -10,7 +10,8 @@
     <application
         android:allowBackup="false"
         android:label="Scriptuc Sniper"
-        android:icon="@drawable/ic_launcher"
+        android:icon="@drawable/kurapika"
+        android:roundIcon="@drawable/kurapika"
         android:supportsRtl="true"
         android:theme="@style/Theme.ScriptucSniper">
 
