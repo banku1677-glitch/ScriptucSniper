@@ -417,10 +417,13 @@ class SniperService : Service() {
         var prevZapros = 0f
         var cenaLota = 0f
         var lastRefresh = System.currentTimeMillis()
+        var tick = 0
 
         while (running) {
+            tick++
             val frame = screenReader.capture()
             if (frame == null) {
+                if (tick % 50 == 0) log("tick=$tick frame=null")
                 delay(20); continue
             }
 
@@ -428,6 +431,10 @@ class SniperService : Service() {
             if (lot != null && lot > 0f) cenaLota = lot
 
             val cur = ocr.readNumber(frame, cfg.zaprosRegion)
+
+            if (tick % 100 == 0) {
+                log("tick=$tick cur=$cur lot=$lot prev=$prevZapros cenaLota=$cenaLota")
+            }
 
             if (cur != null && cur > 0f) {
                 val newZapros = cur + cfg.perebiv
@@ -455,6 +462,7 @@ class SniperService : Service() {
             log("TapService не подключён — включи Accessibility")
             return
         }
+        log(">>> SNIPE new=$newZapros")
         tap.tapAndWait(cfg.btnZakaz[0], cfg.btnZakaz[1], cfg.delayZakaz)
         inputNumber(tap, newZapros.toString())
         Thread.sleep(cfg.delayBefore)
