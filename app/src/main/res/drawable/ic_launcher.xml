@@ -4,13 +4,31 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+
+    <!-- фон -->
     <path
-        android:fillColor="#0F0817"
+        android:fillColor="#0A0505"
         android:pathData="M0,0h108v108h-108z" />
+
+    <!-- цепь по кругу (золото) -->
     <path
-        android:fillColor="#A66BFF"
-        android:pathData="M54,24 L84,42 L84,66 L54,84 L24,66 L24,42 Z" />
+        android:strokeColor="#E8B23A"
+        android:strokeWidth="3"
+        android:fillColor="#00000000"
+        android:pathData="M54,20 A34,34 0 1,1 53.9,20 Z" />
+
+    <!-- глаз: белая склера -->
     <path
-        android:fillColor="#0F0817"
-        android:pathData="M44,44 L64,44 L64,52 L44,52 Z M44,56 L64,56 L64,64 L44,64 Z" />
+        android:fillColor="#F2E6C9"
+        android:pathData="M34,54 Q54,38 74,54 Q54,70 34,54 Z" />
+
+    <!-- зрачок красный -->
+    <path
+        android:fillColor="#C81F1F"
+        android:pathData="M54,54 m-9,0 a9,9 0 1,1 18,0 a9,9 0 1,1 -18,0" />
+
+    <!-- блик -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M50,50 m-2,0 a2,2 0 1,1 4,0 a2,2 0 1,1 -4,0" />
 </vector>
