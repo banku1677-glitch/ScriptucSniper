@@ -124,11 +124,6 @@ data class Config(
     }
 }
 
-object RegionPickState {
-    var x1 = -1
-    var y1 = -1
-}
-
 class TapService : AccessibilityService() {
     companion object {
         @Volatile var instance: TapService? = null
@@ -569,14 +564,16 @@ class SettingsActivity : AppCompatActivity() {
         setContentView(R.layout.activity_settings)
         cfg = Config.load(this)
 
-        findViewById<EditText>(R.id.etZapros).setText(cfg.zaprosRegion.joinToString(","))
-        findViewById<EditText>(R.id.etLot).setText(cfg.lotRegion.joinToString(","))
+        val etZapros = findViewById<EditText>(R.id.etZapros)
+        val etLot = findViewById<EditText>(R.id.etLot)
+        etZapros.setText(cfg.zaprosRegion.joinToString(","))
+        etLot.setText(cfg.lotRegion.joinToString(","))
 
         findViewById<Button>(R.id.btnPickZapros).setOnClickListener {
-            startRegionPick("zaprosRegion", R.id.etZapros)
+            startPick("zaprosRegion", etZapros)
         }
         findViewById<Button>(R.id.btnPickLot).setOnClickListener {
-            startRegionPick("lotRegion", R.id.etLot)
+            startPick("lotRegion", etLot)
         }
 
         bindPoint("btnZakaz", R.id.etBtnZakaz, R.id.btnPickBtnZakaz, cfg.btnZakaz)
@@ -592,7 +589,9 @@ class SettingsActivity : AppCompatActivity() {
             row.findViewById<TextView>(R.id.tvNum).text = "$i:"
             val et = row.findViewById<EditText>(R.id.etNum)
             et.setText(cfg.numKeys[i].joinToString(","))
-            row.findViewById<Button>(R.id.btnPickNum).setOnClickListener { startPointPick("num$i") }
+            row.findViewById<Button>(R.id.btnPickNum).setOnClickListener {
+                startPick("num$i", et)
+            }
             cont.addView(row)
             numFields[i] = et
         }
@@ -602,57 +601,23 @@ class SettingsActivity : AppCompatActivity() {
         findViewById<Button>(R.id.btnSave).setOnClickListener { save() }
     }
 
-    private fun startRegionPick(key: String, etId: Int) {
-        RegionPickState.x1 = -1
-        RegionPickState.y1 = -1
-        CalibResult.onResult = { _, x, y ->
+    // передаём EditText напрямую, а не id — иначе для num-полей все
+    // ссылались бы на первый inflate
+    private fun startPick(key: String, et: EditText) {
+        CalibResult.onResult = { k, value ->
             runOnUiThread {
-                if (RegionPickState.x1 < 0) {
-                    // первый тап
-                    RegionPickState.x1 = x
-                    RegionPickState.y1 = y
-                    Toast.makeText(this, "Первый угол: $x,$y — веди крестик на второй", Toast.LENGTH_LONG).show()
-                    // перезапускаем оверлей для второго тапа
-                    launchCalibOverlay(key)
-                } else {
-                    // второй тап
-                    val rx = minOf(RegionPickState.x1, x)
-                    val ry = minOf(RegionPickState.y1, y)
-                    val rw = kotlin.math.abs(x - RegionPickState.x1)
-                    val rh = kotlin.math.abs(y - RegionPickState.y1)
-                    findViewById<EditText>(etId).setText("$rx,$ry,$rw,$rh")
-                    Toast.makeText(this, "$key = $rx,$ry,$rw,$rh", Toast.LENGTH_LONG).show()
-                    RegionPickState.x1 = -1
-                    RegionPickState.y1 = -1
-                    CalibResult.onResult = null
-                    stopCalibService()
-                }
-            }
-        }
-        launchCalibOverlay(key)
-    }
-
-    private fun startPointPick(key: String) {
-        CalibResult.onResult = { k, x, y ->
-            runOnUiThread {
-                setTargetValue(k, x, y)
-                Toast.makeText(this, "$k = $x, $y", Toast.LENGTH_SHORT).show()
+                et.setText(value)
+                Toast.makeText(this, "$k = $value", Toast.LENGTH_SHORT).show()
                 CalibResult.onResult = null
-                stopCalibService()
             }
         }
         launchCalibOverlay(key)
-    }
-
-    private fun stopCalibService() {
-        val i = Intent(this, CalibrationService::class.java).apply { action = "stop" }
-        try { startService(i) } catch (_: Throwable) {}
     }
 
     private fun bindPoint(key: String, etId: Int, btnId: Int, value: IntArray) {
         val et = findViewById<EditText>(etId)
         et.setText(value.joinToString(","))
-        findViewById<Button>(btnId).setOnClickListener { startPointPick(key) }
+        findViewById<Button>(btnId).setOnClickListener { startPick(key, et) }
     }
 
     private fun launchCalibOverlay(key: String) {
@@ -668,23 +633,6 @@ class SettingsActivity : AppCompatActivity() {
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(i)
         else startService(i)
-    }
-
-    private fun setTargetValue(key: String, x: Int, y: Int) {
-        val etId = when (key) {
-            "btnZakaz" -> R.id.etBtnZakaz
-            "btnVtoroyZakaz" -> R.id.etBtnVtoroy
-            "btnNazad" -> R.id.etBtnNazad
-            "btnOtmena" -> R.id.etBtnOtmena
-            "btnGalochka" -> R.id.etBtnGalochka
-            "btnTochka" -> R.id.etBtnTochka
-            else -> {
-                val idx = key.removePrefix("num").toIntOrNull() ?: return
-                numFields[idx]?.setText("$x,$y")
-                return
-            }
-        }
-        findViewById<EditText>(etId).setText("$x,$y")
     }
 
     private fun save() {
@@ -731,7 +679,7 @@ class PickerActivity : Activity() {
         root.setBackgroundColor(Color.argb(110, 30, 10, 60))
         val hint = TextView(this).apply {
             text = "Тапни по нужному элементу"
-            setTextColor(Color.parseColor("#C89BFF"))
+            setTextColor(Color.parseColor("#FFD766"))
             textSize = 20f
             setBackgroundColor(Color.parseColor("#CC1A1026"))
             setPadding(24, 24, 24, 24)
