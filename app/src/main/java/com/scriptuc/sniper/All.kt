@@ -172,12 +172,10 @@ class ScreenReader(private val ctx: Context) {
 
         val wm = ctx.getSystemService(Context.WINDOW_SERVICE) as WindowManager
         val (sw, sh) = getScreenSize(wm)
-        val screenW = maxOf(sw, sh)
-        val screenH = minOf(sw, sh)
-
-        width = screenW / 2
-        height = screenH / 2
-        dpi = ctx.resources.displayMetrics.densityDpi / 2
+        // полное разрешение — OCR нужен крупный текст
+        width = maxOf(sw, sh)
+        height = minOf(sw, sh)
+        dpi = ctx.resources.displayMetrics.densityDpi
 
         imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 3)
         virtualDisplay = proj.createVirtualDisplay(
@@ -243,12 +241,12 @@ class ScreenReader(private val ctx: Context) {
 class PriceOcr {
     private val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
 
+    // region в полных координатах экрана. кадр тоже полный.
     suspend fun readNumber(frame: Bitmap, region: IntArray): Float? {
-        val scale = 2
-        val x = region[0] / scale
-        val y = region[1] / scale
-        val w = region[2] / scale
-        val h = region[3] / scale
+        val x = region[0]
+        val y = region[1]
+        val w = region[2]
+        val h = region[3]
         val cx = x.coerceIn(0, frame.width - 1)
         val cy = y.coerceIn(0, frame.height - 1)
         val cw = w.coerceAtMost(frame.width - cx)
@@ -601,8 +599,6 @@ class SettingsActivity : AppCompatActivity() {
         findViewById<Button>(R.id.btnSave).setOnClickListener { save() }
     }
 
-    // передаём EditText напрямую, а не id — иначе для num-полей все
-    // ссылались бы на первый inflate
     private fun startPick(key: String, et: EditText) {
         CalibResult.onResult = { k, value ->
             runOnUiThread {
