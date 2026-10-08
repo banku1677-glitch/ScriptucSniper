@@ -61,7 +61,7 @@
                 android:layout_width="wrap_content" android:layout_height="wrap_content"/>
         </LinearLayout>
 
-        <TextView android:text="Поле цены (тап для открытия клавиатуры):" android:textColor="@color/text_secondary"
+        <TextView android:text="Поле цены (тап чтобы открыть клавиатуру):" android:textColor="@color/text_secondary"
             android:layout_width="wrap_content" android:layout_height="wrap_content"/>
         <LinearLayout android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content">
             <EditText android:id="@+id/etPriceField"
@@ -79,6 +79,17 @@
                 android:textColor="@color/text_primary" android:backgroundTint="@color/purple_dim"
                 android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"/>
             <Button android:id="@+id/btnPickBackspace" android:text="взять"
+                android:backgroundTint="@color/purple_dim" android:textColor="@color/text_primary"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+        </LinearLayout>
+
+        <TextView android:text="Регион поля цены в окне (для проверки):" android:textColor="@color/text_secondary"
+            android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+        <LinearLayout android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content">
+            <EditText android:id="@+id/etOrderPriceRegion"
+                android:textColor="@color/text_primary" android:backgroundTint="@color/purple_dim"
+                android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"/>
+            <Button android:id="@+id/btnPickOrderPrice" android:text="взять"
                 android:backgroundTint="@color/purple_dim" android:textColor="@color/text_primary"
                 android:layout_width="wrap_content" android:layout_height="wrap_content"/>
         </LinearLayout>
