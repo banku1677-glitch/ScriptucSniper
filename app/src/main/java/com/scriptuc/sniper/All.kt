@@ -67,7 +67,7 @@ data class Config(
     val delayAfter: Long = 200L,
     val delayInput: Long = 40L,
     val delayKlava: Long = 1500L,
-    val delayOtmena: Long = 1500L,
+    val delayOtmena: Long = 2000L,
 
     val zaprosRegion: IntArray = intArrayOf(1750, 165, 230, 50),
     val lotRegion: IntArray = intArrayOf(1700, 470, 400, 70),
@@ -124,7 +124,7 @@ data class Config(
                 delayAfter = p.getLong("delayAfter", 200L),
                 delayInput = p.getLong("delayInput", 40L),
                 delayKlava = p.getLong("delayKlava", 1500L),
-                delayOtmena = p.getLong("delayOtmena", 1500L),
+                delayOtmena = p.getLong("delayOtmena", 2000L),
                 zaprosRegion = rg("zaprosRegion", intArrayOf(1750, 165, 230, 50)),
                 lotRegion = rg("lotRegion", intArrayOf(1700, 470, 400, 70)),
                 orderPriceRegion = rg("orderPriceRegion", intArrayOf(900, 400, 400, 90)),
@@ -404,6 +404,9 @@ class SniperService : Service() {
         log("Скрипт остановлен.")
     }
 
+    // проверяем — можно ли продолжать цепочку кликов
+    private fun stillActive(): Boolean = running && !TradeState.paused
+
     private suspend fun snipeLoop() {
         var prevZapros = 0f
         var cenaLota = 0f
@@ -441,12 +444,15 @@ class SniperService : Service() {
                 }
 
                 if (cur != null && cur > 0f) {
+                    // реагируем на ЛЮБОЕ изменение — вверх или вниз
+                    val changed = prevZapros > 0f && abs(cur - prevZapros) > 0.001f
                     val newZapros = cur + cfg.perebiv
-                    if (cur > prevZapros && prevZapros > 0f && newZapros < cenaLota) {
+
+                    if (changed && newZapros < cenaLota) {
                         if (cfg.maxPrice > 0f && newZapros > cfg.maxPrice) {
                             log(">>> пропуск: new=$newZapros > max=${cfg.maxPrice}")
                         } else {
-                            log(">>> SNIPE new=$newZapros")
+                            log(">>> SNIPE new=$newZapros (было $prevZapros)")
                             doSnipe(newZapros)
                             lastRefresh = System.currentTimeMillis()
                         }
@@ -472,50 +478,21 @@ class SniperService : Service() {
 
         // 1. открыть окно заказа
         tap.tapAndWait(cfg.btnZakaz[0], cfg.btnZakaz[1], cfg.delayZakaz)
+        if (!stillActive()) { cancelSafe(tap); return }
+
         // 2. тап по полю цены (открыть клавиатуру)
         tap.tapAndWait(cfg.priceField[0], cfg.priceField[1], cfg.delayBefore)
+        if (!stillActive()) { cancelSafe(tap); return }
+
         // 3. стереть старое
-        repeat(10) { tap.tapAndWait(cfg.backspace[0], cfg.backspace[1], cfg.delayInput) }
-        // 4. ввести цифры
-        inputNumber(tap, newZapros.toString())
-        // 5. дать интерфейсу обновиться
-        delay(400)
-
-        // 6. ВЕРИФИКАЦИЯ — прочитать что в окне
-        val verify = screenReader.capture()
-        val readBack = if (verify != null) {
-            val v = ocr.readNumber(verify, cfg.orderPriceRegion)
-            verify.recycle()
-            v
-        } else null
-
-        log(">>> ВЕРИФИКАЦИЯ: в окне ${readBack ?: "?"}, ожидал $newZapros")
-
-        // 7. ТРИ УСЛОВИЯ для подтверждения:
-        //    - readBack != null (что-то прочитали)
-        //    - |readBack - newZapros| < 0.02 (совпало с ожиданием)
-        //    - readBack <= maxPrice (не дороже максимума)
-        val matches = readBack != null && abs(readBack - newZapros) < 0.02f
-        val underMax = cfg.maxPrice <= 0f || (readBack != null && readBack <= cfg.maxPrice)
-
-        if (!matches || !underMax) {
-            log(">>> ОТМЕНА: в окне $readBack, ожидал $newZapros, max=${cfg.maxPrice}")
-            tap.tapAndWait(cfg.btnOtmena[0], cfg.btnOtmena[1], cfg.delayOtmena)
-            return
+        repeat(10) {
+            if (!stillActive()) { cancelSafe(tap); return }
+            tap.tapAndWait(cfg.backspace[0], cfg.backspace[1], cfg.delayInput)
         }
 
-        // 8. всё ок — галочка на клавиатуре
-        tap.tapAndWait(cfg.btnGalochka[0], cfg.btnGalochka[1], cfg.delayAfter)
-        // 9. выставить ордер
-        tap.tapAndWait(cfg.btnVtoroyZakaz[0], cfg.btnVtoroyZakaz[1], cfg.delayKlava)
-        // 10. закрыть окно
-        tap.tapAndWait(cfg.btnOtmena[0], cfg.btnOtmena[1], cfg.delayOtmena)
-
-        log(">>> ордер выставлен на $newZapros")
-    }
-
-    private suspend fun inputNumber(tap: TapService, s: String) {
-        for (ch in s) {
+        // 4. ввести цифры
+        for (ch in newZapros.toString()) {
+            if (!stillActive()) { cancelSafe(tap); return }
             when {
                 ch == '.' || ch == ',' -> tap.tapAndWait(cfg.btnTochka[0], cfg.btnTochka[1], cfg.delayInput)
                 ch.isDigit() -> {
@@ -524,6 +501,57 @@ class SniperService : Service() {
                 }
             }
         }
+
+        // 5. дать интерфейсу обновиться
+        delay(400)
+
+        // 6. ВЕРИФИКАЦИЯ — 3 попытки
+        var readBack: Float? = null
+        for (attempt in 1..3) {
+            if (!stillActive()) { cancelSafe(tap); return }
+            val verify = screenReader.capture()
+            if (verify != null) {
+                readBack = ocr.readNumber(verify, cfg.orderPriceRegion)
+                verify.recycle()
+            }
+            if (readBack != null) break
+            log(">>> ВЕРИФИКАЦИЯ попытка $attempt: null, пробую снова")
+            delay(200)
+        }
+
+        log(">>> ВЕРИФИКАЦИЯ: в окне ${readBack ?: "?"}, ожидал $newZapros, max=${cfg.maxPrice}")
+
+        // 7. Проверяем ТРИ условия:
+        val matches = readBack != null && abs(readBack - newZapros) < 0.02f
+        val underMax = cfg.maxPrice <= 0f || (readBack != null && readBack <= cfg.maxPrice)
+
+        if (!matches || !underMax) {
+            log(">>> ОТМЕНА: в окне $readBack, ожидал $newZapros, max=${cfg.maxPrice}")
+            tap.tapAndWait(cfg.btnOtmena[0], cfg.btnOtmena[1], cfg.delayOtmena)
+            // дать окну закрыться
+            delay(800)
+            return
+        }
+
+        // 8. галочка
+        tap.tapAndWait(cfg.btnGalochka[0], cfg.btnGalochka[1], cfg.delayAfter)
+        if (!stillActive()) { cancelSafe(tap); return }
+
+        // 9. выставить ордер
+        tap.tapAndWait(cfg.btnVtoroyZakaz[0], cfg.btnVtoroyZakaz[1], cfg.delayKlava)
+
+        // 10. закрыть окно
+        tap.tapAndWait(cfg.btnOtmena[0], cfg.btnOtmena[1], cfg.delayOtmena)
+        delay(800)
+
+        log(">>> ордер выставлен на $newZapros")
+    }
+
+    // безопасная отмена — жать крестик и ждать
+    private suspend fun cancelSafe(tap: TapService) {
+        log(">>> отмена (юзер остановил)")
+        tap.tapAndWait(cfg.btnOtmena[0], cfg.btnOtmena[1], cfg.delayOtmena)
+        delay(800)
     }
 
     private fun createChannel() {
