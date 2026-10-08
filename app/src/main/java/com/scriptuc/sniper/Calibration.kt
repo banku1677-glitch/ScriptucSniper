@@ -21,7 +21,6 @@ import android.widget.TextView
 import androidx.core.app.NotificationCompat
 
 object CalibResult {
-    // (key, value) где value = "x,y" для точки или "x,y,w,h" для региона
     var onResult: ((String, String) -> Unit)? = null
 }
 
@@ -146,7 +145,6 @@ class CalibrationService : Service() {
                     if (x1 < 0) {
                         x1 = px; y1 = py
                         tvK.text = "1-й угол: $x1,$y1\nВеди на 2-й"
-                        tvK.textSize = 14f
                     } else {
                         val rx = minOf(x1, px)
                         val ry = minOf(y1, py)
