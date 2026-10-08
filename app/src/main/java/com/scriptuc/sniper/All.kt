@@ -9,6 +9,7 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
@@ -26,9 +27,11 @@ import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.provider.MediaStore
 import android.provider.Settings
 import android.util.DisplayMetrics
 import android.view.MotionEvent
@@ -152,8 +155,8 @@ class ScreenReader(private val ctx: Context) {
     private var projection: MediaProjection? = null
     private var virtualDisplay: VirtualDisplay? = null
     private var imageReader: ImageReader? = null
-    private var width = 0
-    private var height = 0
+    var width = 0
+    var height = 0
     private var dpi = 0
 
     private val projectionCallback = object : MediaProjection.Callback() {
@@ -172,7 +175,6 @@ class ScreenReader(private val ctx: Context) {
 
         val wm = ctx.getSystemService(Context.WINDOW_SERVICE) as WindowManager
         val (sw, sh) = getScreenSize(wm)
-        // полное разрешение — OCR нужен крупный текст
         width = maxOf(sw, sh)
         height = minOf(sw, sh)
         dpi = ctx.resources.displayMetrics.densityDpi
@@ -241,7 +243,6 @@ class ScreenReader(private val ctx: Context) {
 class PriceOcr {
     private val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
 
-    // region в полных координатах экрана. кадр тоже полный.
     suspend fun readNumber(frame: Bitmap, region: IntArray): Float? {
         val x = region[0]
         val y = region[1]
@@ -289,6 +290,7 @@ class SniperService : Service() {
     private lateinit var ocr: PriceOcr
     private val scope = CoroutineScope(Dispatchers.IO + Job())
     private var loopJob: Job? = null
+    private var frameSaved = false
 
     override fun onCreate() {
         super.onCreate()
@@ -326,11 +328,12 @@ class SniperService : Service() {
         startForegroundCompat()
         try {
             screenReader.start(rc, data)
-            log(">>> ScreenReader стартовал")
+            log(">>> ScreenReader стартовал: кадр ${screenReader.width}x${screenReader.height}")
         } catch (t: Throwable) {
             log("Ошибка старта ScreenReader: ${t.message}")
             stopSelf(); return START_NOT_STICKY
         }
+        frameSaved = false
         startLoop()
         return START_NOT_STICKY
     }
@@ -377,13 +380,34 @@ class SniperService : Service() {
                 delay(50); continue
             }
 
+            // дамп кадра в Pictures — один раз на 50-м тике
+            if (!frameSaved && tick >= 50) {
+                frameSaved = true
+                try {
+                    val values = ContentValues().apply {
+                        put(MediaStore.Images.Media.DISPLAY_NAME, "scriptuc_frame_${System.currentTimeMillis()}.png")
+                        put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES)
+                        }
+                    }
+                    val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+                    contentResolver.openOutputStream(uri!!)?.use { out ->
+                        frame.compress(Bitmap.CompressFormat.PNG, 100, out)
+                    }
+                    log(">>> КАДР СОХРАНЁН в Галерею/Pictures")
+                } catch (t: Throwable) {
+                    log(">>> не смог сохранить кадр: ${t.message}")
+                }
+            }
+
             val lot = ocr.readNumber(frame, cfg.lotRegion)
             if (lot != null && lot > 0f) cenaLota = lot
 
             val cur = ocr.readNumber(frame, cfg.zaprosRegion)
 
             if (tick % 10 == 0) {
-                log("tick=$tick cur=$cur lot=$lot prev=$prevZapros cenaLota=$cenaLota")
+                log("tick=$tick cur=$cur lot=$lot frame=${frame.width}x${frame.height}")
             }
 
             if (cur != null && cur > 0f) {
@@ -441,10 +465,14 @@ class SniperService : Service() {
             .setContentText("Работает")
             .setSmallIcon(android.R.drawable.ic_menu_compass)
             .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setPriority(CompatP.PRIORITY_LOW)
             .build()
 
     private fun log(msg: String) { logSink?.invoke(msg) }
+}
+
+object CompatP {
+    const val PRIORITY_LOW = NotificationCompat.PRIORITY_LOW
 }
 
 class MainActivity : AppCompatActivity() {
