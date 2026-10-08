@@ -58,29 +58,41 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 
 data class Config(
-    val perebiv: Float = 0.01f,
+    val perebiv: Float = 999f,          // защита — поставь 0.01 когда будешь реально ловить
     val loopMs: Long = 10L,
-    val delayZakaz: Long = 400L,
-    val delayBefore: Long = 300L,
-    val delayAfter: Long = 100L,
-    val delayInput: Long = 10L,
-    val delayKlava: Long = 1200L,
-    val delayOtmena: Long = 1200L,
-    val zaprosRegion: IntArray = intArrayOf(1764, 187, 145, 27),
-    val lotRegion: IntArray = intArrayOf(1133, 386, 253, 75),
-    val btnZakaz: IntArray = intArrayOf(2111, 183),
-    val priceField: IntArray = intArrayOf(1100, 400),
-    val backspace: IntArray = intArrayOf(1900, 690),
-    val btnVtoroyZakaz: IntArray = intArrayOf(1880, 189),
+    val delayZakaz: Long = 600L,
+    val delayBefore: Long = 400L,
+    val delayAfter: Long = 200L,
+    val delayInput: Long = 40L,
+    val delayKlava: Long = 1500L,
+    val delayOtmena: Long = 1500L,
+
+    // РЕГИОНЫ
+    val zaprosRegion: IntArray = intArrayOf(1750, 165, 230, 50),
+    val lotRegion: IntArray = intArrayOf(1820, 490, 200, 60),
+
+    // ТОЧКИ КНОПОК
+    val btnZakaz: IntArray = intArrayOf(2139, 186),
+    val priceField: IntArray = intArrayOf(990, 395),
+    val backspace: IntArray = intArrayOf(1690, 660),
+    val btnVtoroyZakaz: IntArray = intArrayOf(1124, 759),
     val btnNazad: IntArray = intArrayOf(1740, 263),
-    val btnOtmena: IntArray = intArrayOf(1730, 282),
-    val btnGalochka: IntArray = intArrayOf(1944, 912),
-    val btnTochka: IntArray = intArrayOf(1419, 972),
+    val btnOtmena: IntArray = intArrayOf(1744, 282),
+    val btnGalochka: IntArray = intArrayOf(1911, 916),
+    val btnTochka: IntArray = intArrayOf(1411, 922),
+
+    // ЦИФРЫ КЛАВИАТУРЫ
     val numKeys: Array<IntArray> = arrayOf(
-        intArrayOf(929, 894), intArrayOf(449, 559), intArrayOf(941, 571),
-        intArrayOf(1401, 560), intArrayOf(414, 682), intArrayOf(938, 669),
-        intArrayOf(1427, 651), intArrayOf(414, 795), intArrayOf(934, 788),
-        intArrayOf(1398, 810)
+        intArrayOf(850, 805),   // 0
+        intArrayOf(430, 460),   // 1
+        intArrayOf(850, 460),   // 2
+        intArrayOf(1275, 460),  // 3
+        intArrayOf(430, 575),   // 4
+        intArrayOf(850, 575),   // 5
+        intArrayOf(1276, 575),  // 6
+        intArrayOf(430, 690),   // 7
+        intArrayOf(850, 690),   // 8
+        intArrayOf(1275, 690)   // 9
     ),
 ) {
     companion object {
@@ -98,30 +110,30 @@ data class Config(
                 return if (a.size == 4) a.toIntArray() else def
             }
             val defNum = arrayOf(
-                intArrayOf(929, 894), intArrayOf(449, 559), intArrayOf(941, 571),
-                intArrayOf(1401, 560), intArrayOf(414, 682), intArrayOf(938, 669),
-                intArrayOf(1427, 651), intArrayOf(414, 795), intArrayOf(934, 788),
-                intArrayOf(1398, 810)
+                intArrayOf(850, 805), intArrayOf(430, 460), intArrayOf(850, 460),
+                intArrayOf(1275, 460), intArrayOf(430, 575), intArrayOf(850, 575),
+                intArrayOf(1276, 575), intArrayOf(430, 690), intArrayOf(850, 690),
+                intArrayOf(1275, 690)
             )
             return Config(
-                perebiv = p.getFloat("perebiv", 0.01f),
+                perebiv = p.getFloat("perebiv", 999f),
                 loopMs = p.getLong("loopMs", 10L),
-                delayZakaz = p.getLong("delayZakaz", 400L),
-                delayBefore = p.getLong("delayBefore", 300L),
-                delayAfter = p.getLong("delayAfter", 100L),
-                delayInput = p.getLong("delayInput", 10L),
-                delayKlava = p.getLong("delayKlava", 1200L),
-                delayOtmena = p.getLong("delayOtmena", 1200L),
-                zaprosRegion = rg("zaprosRegion", intArrayOf(1764, 187, 145, 27)),
-                lotRegion = rg("lotRegion", intArrayOf(1133, 386, 253, 75)),
-                btnZakaz = pt("btnZakaz", intArrayOf(2111, 183)),
-                priceField = pt("priceField", intArrayOf(1100, 400)),
-                backspace = pt("backspace", intArrayOf(1900, 690)),
-                btnVtoroyZakaz = pt("btnVtoroyZakaz", intArrayOf(1880, 189)),
+                delayZakaz = p.getLong("delayZakaz", 600L),
+                delayBefore = p.getLong("delayBefore", 400L),
+                delayAfter = p.getLong("delayAfter", 200L),
+                delayInput = p.getLong("delayInput", 40L),
+                delayKlava = p.getLong("delayKlava", 1500L),
+                delayOtmena = p.getLong("delayOtmena", 1500L),
+                zaprosRegion = rg("zaprosRegion", intArrayOf(1750, 165, 230, 50)),
+                lotRegion = rg("lotRegion", intArrayOf(1820, 490, 200, 60)),
+                btnZakaz = pt("btnZakaz", intArrayOf(2139, 186)),
+                priceField = pt("priceField", intArrayOf(990, 395)),
+                backspace = pt("backspace", intArrayOf(1690, 660)),
+                btnVtoroyZakaz = pt("btnVtoroyZakaz", intArrayOf(1124, 759)),
                 btnNazad = pt("btnNazad", intArrayOf(1740, 263)),
-                btnOtmena = pt("btnOtmena", intArrayOf(1730, 282)),
-                btnGalochka = pt("btnGalochka", intArrayOf(1944, 912)),
-                btnTochka = pt("btnTochka", intArrayOf(1419, 972)),
+                btnOtmena = pt("btnOtmena", intArrayOf(1744, 282)),
+                btnGalochka = pt("btnGalochka", intArrayOf(1911, 916)),
+                btnTochka = pt("btnTochka", intArrayOf(1411, 922)),
                 numKeys = Array(10) { i -> pt("num$i", defNum[i]) },
             )
         }
@@ -652,7 +664,7 @@ class SettingsActivity : AppCompatActivity() {
         }
         saveRegion(p, "zaprosRegion", R.id.etZapros)
         saveRegion(p, "lotRegion", R.id.etLot)
-        val perebiv = findViewById<EditText>(R.id.etPerebiv).text.toString().toFloatOrNull() ?: 0.01f
+        val perebiv = findViewById<EditText>(R.id.etPerebiv).text.toString().toFloatOrNull() ?: 999f
         val loop = findViewById<EditText>(R.id.etLoopMs).text.toString().toLongOrNull() ?: 10L
         p.putFloat("perebiv", perebiv)
         p.putLong("loopMs", loop)
