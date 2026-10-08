@@ -198,11 +198,9 @@ class ScreenReader(private val ctx: Context) {
         val wm = ctx.getSystemService(Context.WINDOW_SERVICE) as WindowManager
         val bounds = wm.currentWindowMetrics.bounds
 
-        // Standoff 2 всегда в ландшафте — берём больший размер как ширину.
         val screenW = maxOf(bounds.width(), bounds.height())
         val screenH = minOf(bounds.width(), bounds.height())
 
-        // захватываем в половину разрешения (быстрее, меньше памяти)
         width = screenW / 2
         height = screenH / 2
         dpi = ctx.resources.displayMetrics.densityDpi / 2
@@ -264,7 +262,6 @@ class PriceOcr {
 
     private val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
 
-    // region в координатах ПОЛНОГО экрана (ландшафт). кадр в половине → делим на 2.
     suspend fun readNumber(frame: Bitmap, region: IntArray): Float? {
         val scale = 2
         val x = region[0] / scale
@@ -364,7 +361,7 @@ class SniperService : Service() {
                 startForegroundCompat()
                 try {
                     screenReader.start(rc, data)
-                    log(">>> ScreenReader стартовал, ${screenReader.hashCode()}")
+                    log(">>> ScreenReader стартовал")
                 } catch (t: Throwable) {
                     log("Ошибка старта ScreenReader: ${t.message}")
                     try {
@@ -407,27 +404,11 @@ class SniperService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun startLoop() {
-        if (loopJob?.isActive == true) {
-            log(">>> loop уже активен")
-            return
-        }
+        if (loopJob?.isActive == true) return
         running = true
         log("Скрипт запущен. Перебив +${cfg.perebiv}")
         loopJob = scope.launch {
-            try {
-                log(">>> loop корутина пошла")
-                snipeLoop()
-                log(">>> loop корутина вышла нормально")
-            } catch (t: Throwable) {
-                log(">>> loop УПАЛ: ${t.message}")
-                try {
-                    val sw = java.io.StringWriter()
-                    t.printStackTrace(java.io.PrintWriter(sw))
-                    java.io.File(filesDir, "crash.txt").appendText(
-                        "\n\n=== loop crash ${System.currentTimeMillis()} ===\n" + sw.toString()
-                    )
-                } catch (_: Throwable) {}
-            }
+            try { snipeLoop() } catch (_: Throwable) {}
         }
     }
 
@@ -446,13 +427,10 @@ class SniperService : Service() {
 
         while (running) {
             tick++
-            val frame = screenReader.capture()
-            if (tick <= 3) log(">>> tick $tick frame=${frame?.let {"${it.width}x${it.height}"} ?: "null"}")
-
-            if (frame == null) {
-                if (tick % 10 == 0) log("tick=$tick frame=NULL (нет кадров)")
-                delay(50); continue
-            }
+            val frame = screenReader.capture() ?: run {
+                if (tick % 10 == 0) log("tick=$tick нет кадров")
+                delay(50); return@run null
+            } ?: continue
 
             val lot = ocr.readNumber(frame, cfg.lotRegion)
             if (lot != null && lot > 0f) cenaLota = lot
@@ -485,7 +463,7 @@ class SniperService : Service() {
     private fun doSnipe(newZapros: Float) {
         val tap = TapService.instance
         if (tap == null) {
-            log("TapService не подключён — включи Accessibility")
+            log("TapService не подключён")
             return
         }
         tap.tapAndWait(cfg.btnZakaz[0], cfg.btnZakaz[1], cfg.delayZakaz)
@@ -544,7 +522,7 @@ class MainActivity : AppCompatActivity() {
         if (res.data != null) {
             startSniperService(res.resultCode, res.data!!)
         } else {
-            appendLog("MediaProjection отклонён (нет data)")
+            appendLog("MediaProjection отклонён")
         }
     }
 
@@ -585,11 +563,10 @@ class MainActivity : AppCompatActivity() {
         btnStart.setOnClickListener {
             appendLog(">>> нажат Start")
             if (TapService.instance == null) {
-                appendLog(">>> TapService null, открываю Accessibility")
+                appendLog(">>> TapService null")
                 startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                 return@setOnClickListener
             }
-            appendLog(">>> вызываю createScreenCaptureIntent")
             requestProjection()
         }
 
@@ -624,12 +601,9 @@ class MainActivity : AppCompatActivity() {
     private fun requestProjection() {
         try {
             val mgr = getSystemService(MediaProjectionManager::class.java)
-            val i = mgr.createScreenCaptureIntent()
-            appendLog(">>> intent создан: $i")
-            projectionLauncher.launch(i)
-            appendLog(">>> launch() вызван")
+            projectionLauncher.launch(mgr.createScreenCaptureIntent())
         } catch (t: Throwable) {
-            appendLog(">>> ОШИБКА launch: ${t.message}")
+            appendLog(">>> ОШИБКА: ${t.message}")
         }
     }
 
@@ -654,11 +628,58 @@ class MainActivity : AppCompatActivity() {
     }
 }
 
+// для регионов храним временно первую точку
+object RegionPickState {
+    var x1 = -1
+    var y1 = -1
+}
+
 class SettingsActivity : AppCompatActivity() {
 
     private lateinit var cfg: Config
     private var pendingTarget: String? = null
     private val numFields = arrayOfNulls<EditText>(10)
+
+    // регион: тапнуть первый угол → ждём второй тап в оверлее
+    private val pickLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { res ->
+        if (res.resultCode == RESULT_OK && res.data != null) {
+            val x = res.data!!.getIntExtra("x", -1)
+            val y = res.data!!.getIntExtra("y", -1)
+            val t = pendingTarget ?: return@registerForActivityResult
+            if (x < 0 || y < 0) return@registerForActivityResult
+
+            if (t == "zaprosRegion" || t == "lotRegion") {
+                // если первый угол ещё не задан — это первый тап
+                if (RegionPickState.x1 < 0) {
+                    RegionPickState.x1 = x
+                    RegionPickState.y1 = y
+                    // сразу запускаем оверлей на второй тап
+                    CalibResult.onResult = { _, x2, y2 ->
+                        runOnUiThread {
+                            val rx = minOf(RegionPickState.x1, x2)
+                            val ry = minOf(RegionPickState.y1, y2)
+                            val rw = kotlin.math.abs(x2 - RegionPickState.x1)
+                            val rh = kotlin.math.abs(y2 - RegionPickState.y1)
+                            val et = findViewById<EditText>(
+                                if (t == "zaprosRegion") R.id.etZapros else R.id.etLot
+                            )
+                            et.setText("$rx,$ry,$rw,$rh")
+                            Toast.makeText(this, "$t = $rx,$ry,$rw,$rh", Toast.LENGTH_SHORT).show()
+                            RegionPickState.x1 = -1
+                            RegionPickState.y1 = -1
+                            CalibResult.onResult = null
+                        }
+                    }
+                    launchCalibOverlay(t)
+                }
+            } else {
+                setTargetValue(t, x, y)
+                Toast.makeText(this, "$t = $x, $y", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -667,6 +688,17 @@ class SettingsActivity : AppCompatActivity() {
 
         findViewById<EditText>(R.id.etZapros).setText(cfg.zaprosRegion.joinToString(","))
         findViewById<EditText>(R.id.etLot).setText(cfg.lotRegion.joinToString(","))
+
+        findViewById<Button>(R.id.btnPickZapros).setOnClickListener {
+            pendingTarget = "zaprosRegion"
+            RegionPickState.x1 = -1
+            launchCalibOverlay("zaprosRegion")
+        }
+        findViewById<Button>(R.id.btnPickLot).setOnClickListener {
+            pendingTarget = "lotRegion"
+            RegionPickState.x1 = -1
+            launchCalibOverlay("lotRegion")
+        }
 
         bindPoint("btnZakaz", R.id.etBtnZakaz, R.id.btnPickBtnZakaz, cfg.btnZakaz)
         bindPoint("btnVtoroyZakaz", R.id.etBtnVtoroy, R.id.btnPickBtnVtoroy, cfg.btnVtoroyZakaz)
@@ -682,7 +714,8 @@ class SettingsActivity : AppCompatActivity() {
             val et = row.findViewById<EditText>(R.id.etNum)
             et.setText(cfg.numKeys[i].joinToString(","))
             row.findViewById<Button>(R.id.btnPickNum).setOnClickListener {
-                launchCalib("num$i")
+                pendingTarget = "num$i"
+                launchCalibOverlay("num$i")
             }
             cont.addView(row)
             numFields[i] = et
@@ -697,12 +730,20 @@ class SettingsActivity : AppCompatActivity() {
     private fun bindPoint(key: String, etId: Int, btnId: Int, value: IntArray) {
         val et = findViewById<EditText>(etId)
         et.setText(value.joinToString(","))
-        findViewById<Button>(btnId).setOnClickListener { launchCalib(key) }
+        findViewById<Button>(btnId).setOnClickListener {
+            pendingTarget = key
+            CalibResult.onResult = { k, x, y ->
+                runOnUiThread {
+                    setTargetValue(k, x, y)
+                    Toast.makeText(this, "$k = $x, $y", Toast.LENGTH_SHORT).show()
+                }
+            }
+            launchCalibOverlay(key)
+        }
     }
 
-    private fun launchCalib(key: String) {
+    private fun launchCalibOverlay(key: String) {
         if (!Settings.canDrawOverlays(this)) {
-            pendingTarget = key
             startActivity(Intent(
                 Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                 Uri.parse("package:$packageName")
@@ -714,26 +755,6 @@ class SettingsActivity : AppCompatActivity() {
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(i)
         else startService(i)
-    }
-
-    override fun onResume() {
-        super.onResume()
-        CalibResult.onResult = { k, x, y ->
-            runOnUiThread {
-                setTargetValue(k, x, y)
-                Toast.makeText(this, "$k = $x, $y", Toast.LENGTH_SHORT).show()
-            }
-        }
-        val pk = pendingTarget
-        if (!pk.isNullOrEmpty() && Settings.canDrawOverlays(this)) {
-            pendingTarget = null
-            launchCalib(pk)
-        }
-    }
-
-    override fun onPause() {
-        super.onPause()
-        CalibResult.onResult = null
     }
 
     private fun setTargetValue(key: String, x: Int, y: Int) {
