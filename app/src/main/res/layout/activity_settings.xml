@@ -26,8 +26,7 @@
                 android:inputType="text"
                 android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"/>
             <Button android:id="@+id/btnPickZapros" android:text="взять"
-                android:backgroundTint="@color/purple_dim"
-                android:textColor="@color/text_primary"
+                android:backgroundTint="@color/purple_dim" android:textColor="@color/text_primary"
                 android:layout_width="wrap_content" android:layout_height="wrap_content"/>
         </LinearLayout>
 
@@ -41,8 +40,7 @@
                 android:inputType="text"
                 android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"/>
             <Button android:id="@+id/btnPickLot" android:text="взять"
-                android:backgroundTint="@color/purple_dim"
-                android:textColor="@color/text_primary"
+                android:backgroundTint="@color/purple_dim" android:textColor="@color/text_primary"
                 android:layout_width="wrap_content" android:layout_height="wrap_content"/>
         </LinearLayout>
 
@@ -59,6 +57,28 @@
                 android:textColor="@color/text_primary" android:backgroundTint="@color/purple_dim"
                 android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"/>
             <Button android:id="@+id/btnPickBtnZakaz" android:text="взять"
+                android:backgroundTint="@color/purple_dim" android:textColor="@color/text_primary"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+        </LinearLayout>
+
+        <TextView android:text="Поле цены (тап для открытия клавиатуры):" android:textColor="@color/text_secondary"
+            android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+        <LinearLayout android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content">
+            <EditText android:id="@+id/etPriceField"
+                android:textColor="@color/text_primary" android:backgroundTint="@color/purple_dim"
+                android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"/>
+            <Button android:id="@+id/btnPickPriceField" android:text="взять"
+                android:backgroundTint="@color/purple_dim" android:textColor="@color/text_primary"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+        </LinearLayout>
+
+        <TextView android:text="Backspace (стереть):" android:textColor="@color/text_secondary"
+            android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+        <LinearLayout android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content">
+            <EditText android:id="@+id/etBackspace"
+                android:textColor="@color/text_primary" android:backgroundTint="@color/purple_dim"
+                android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"/>
+            <Button android:id="@+id/btnPickBackspace" android:text="взять"
                 android:backgroundTint="@color/purple_dim" android:textColor="@color/text_primary"
                 android:layout_width="wrap_content" android:layout_height="wrap_content"/>
         </LinearLayout>
