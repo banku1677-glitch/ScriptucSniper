@@ -56,10 +56,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
+import kotlin.math.abs
 
 data class Config(
     val perebiv: Float = 0.01f,
-    val maxPrice: Float = 80f,
+    val maxPrice: Float = 500f,
     val loopMs: Long = 10L,
     val delayZakaz: Long = 600L,
     val delayBefore: Long = 400L,
@@ -70,6 +71,7 @@ data class Config(
 
     val zaprosRegion: IntArray = intArrayOf(1750, 165, 230, 50),
     val lotRegion: IntArray = intArrayOf(1700, 470, 400, 70),
+    val orderPriceRegion: IntArray = intArrayOf(900, 400, 400, 90),
 
     val btnZakaz: IntArray = intArrayOf(2139, 186),
     val priceField: IntArray = intArrayOf(1070, 443),
@@ -115,7 +117,7 @@ data class Config(
             )
             return Config(
                 perebiv = p.getFloat("perebiv", 0.01f),
-                maxPrice = p.getFloat("maxPrice", 80f),
+                maxPrice = p.getFloat("maxPrice", 500f),
                 loopMs = p.getLong("loopMs", 10L),
                 delayZakaz = p.getLong("delayZakaz", 600L),
                 delayBefore = p.getLong("delayBefore", 400L),
@@ -125,6 +127,7 @@ data class Config(
                 delayOtmena = p.getLong("delayOtmena", 1500L),
                 zaprosRegion = rg("zaprosRegion", intArrayOf(1750, 165, 230, 50)),
                 lotRegion = rg("lotRegion", intArrayOf(1700, 470, 400, 70)),
+                orderPriceRegion = rg("orderPriceRegion", intArrayOf(900, 400, 400, 90)),
                 btnZakaz = pt("btnZakaz", intArrayOf(2139, 186)),
                 priceField = pt("priceField", intArrayOf(1070, 443)),
                 backspace = pt("backspace", intArrayOf(1942, 782)),
@@ -467,12 +470,45 @@ class SniperService : Service() {
         val tap = TapService.instance
         if (tap == null) { log("TapService не подключён"); return }
 
+        // 1. открыть окно заказа
         tap.tapAndWait(cfg.btnZakaz[0], cfg.btnZakaz[1], cfg.delayZakaz)
+        // 2. тап по полю цены (открыть клавиатуру)
         tap.tapAndWait(cfg.priceField[0], cfg.priceField[1], cfg.delayBefore)
-        repeat(8) { tap.tapAndWait(cfg.backspace[0], cfg.backspace[1], cfg.delayInput) }
+        // 3. стереть старое
+        repeat(10) { tap.tapAndWait(cfg.backspace[0], cfg.backspace[1], cfg.delayInput) }
+        // 4. ввести цифры
         inputNumber(tap, newZapros.toString())
+        // 5. дать интерфейсу обновиться
+        delay(400)
+
+        // 6. ВЕРИФИКАЦИЯ — прочитать что в окне
+        val verify = screenReader.capture()
+        val readBack = if (verify != null) {
+            val v = ocr.readNumber(verify, cfg.orderPriceRegion)
+            verify.recycle()
+            v
+        } else null
+
+        log(">>> ВЕРИФИКАЦИЯ: в окне ${readBack ?: "?"}, ожидал $newZapros")
+
+        // 7. ТРИ УСЛОВИЯ для подтверждения:
+        //    - readBack != null (что-то прочитали)
+        //    - |readBack - newZapros| < 0.02 (совпало с ожиданием)
+        //    - readBack <= maxPrice (не дороже максимума)
+        val matches = readBack != null && abs(readBack - newZapros) < 0.02f
+        val underMax = cfg.maxPrice <= 0f || (readBack != null && readBack <= cfg.maxPrice)
+
+        if (!matches || !underMax) {
+            log(">>> ОТМЕНА: в окне $readBack, ожидал $newZapros, max=${cfg.maxPrice}")
+            tap.tapAndWait(cfg.btnOtmena[0], cfg.btnOtmena[1], cfg.delayOtmena)
+            return
+        }
+
+        // 8. всё ок — галочка на клавиатуре
         tap.tapAndWait(cfg.btnGalochka[0], cfg.btnGalochka[1], cfg.delayAfter)
+        // 9. выставить ордер
         tap.tapAndWait(cfg.btnVtoroyZakaz[0], cfg.btnVtoroyZakaz[1], cfg.delayKlava)
+        // 10. закрыть окно
         tap.tapAndWait(cfg.btnOtmena[0], cfg.btnOtmena[1], cfg.delayOtmena)
 
         log(">>> ордер выставлен на $newZapros")
@@ -638,15 +674,18 @@ class SettingsActivity : AppCompatActivity() {
         val etLot = findViewById<EditText>(R.id.etLot)
         val etPriceField = findViewById<EditText>(R.id.etPriceField)
         val etBackspace = findViewById<EditText>(R.id.etBackspace)
+        val etOrderPrice = findViewById<EditText>(R.id.etOrderPriceRegion)
         etZapros.setText(cfg.zaprosRegion.joinToString(","))
         etLot.setText(cfg.lotRegion.joinToString(","))
         etPriceField.setText(cfg.priceField.joinToString(","))
         etBackspace.setText(cfg.backspace.joinToString(","))
+        etOrderPrice.setText(cfg.orderPriceRegion.joinToString(","))
 
         findViewById<Button>(R.id.btnPickZapros).setOnClickListener { startPick("zaprosRegion", etZapros) }
         findViewById<Button>(R.id.btnPickLot).setOnClickListener { startPick("lotRegion", etLot) }
         findViewById<Button>(R.id.btnPickPriceField).setOnClickListener { startPick("priceField", etPriceField) }
         findViewById<Button>(R.id.btnPickBackspace).setOnClickListener { startPick("backspace", etBackspace) }
+        findViewById<Button>(R.id.btnPickOrderPrice).setOnClickListener { startPick("orderPriceRegion", etOrderPrice) }
 
         bindPoint("btnZakaz", R.id.etBtnZakaz, R.id.btnPickBtnZakaz, cfg.btnZakaz)
         bindPoint("btnVtoroyZakaz", R.id.etBtnVtoroy, R.id.btnPickBtnVtoroy, cfg.btnVtoroyZakaz)
@@ -724,8 +763,9 @@ class SettingsActivity : AppCompatActivity() {
         }
         saveRegion(p, "zaprosRegion", R.id.etZapros)
         saveRegion(p, "lotRegion", R.id.etLot)
+        saveRegion(p, "orderPriceRegion", R.id.etOrderPriceRegion)
         val perebiv = findViewById<EditText>(R.id.etPerebiv).text.toString().toFloatOrNull() ?: 0.01f
-        val maxP = findViewById<EditText>(R.id.etMaxPrice).text.toString().toFloatOrNull() ?: 80f
+        val maxP = findViewById<EditText>(R.id.etMaxPrice).text.toString().toFloatOrNull() ?: 500f
         val loop = findViewById<EditText>(R.id.etLoopMs).text.toString().toLongOrNull() ?: 10L
         p.putFloat("perebiv", perebiv)
         p.putFloat("maxPrice", maxP)
