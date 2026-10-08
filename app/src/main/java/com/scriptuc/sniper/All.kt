@@ -137,6 +137,11 @@ data class Config(
     }
 }
 
+object RegionPickState {
+    var x1 = -1
+    var y1 = -1
+}
+
 class TapService : AccessibilityService() {
 
     companion object {
@@ -628,58 +633,10 @@ class MainActivity : AppCompatActivity() {
     }
 }
 
-// для регионов храним временно первую точку
-object RegionPickState {
-    var x1 = -1
-    var y1 = -1
-}
-
 class SettingsActivity : AppCompatActivity() {
 
     private lateinit var cfg: Config
-    private var pendingTarget: String? = null
     private val numFields = arrayOfNulls<EditText>(10)
-
-    // регион: тапнуть первый угол → ждём второй тап в оверлее
-    private val pickLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { res ->
-        if (res.resultCode == RESULT_OK && res.data != null) {
-            val x = res.data!!.getIntExtra("x", -1)
-            val y = res.data!!.getIntExtra("y", -1)
-            val t = pendingTarget ?: return@registerForActivityResult
-            if (x < 0 || y < 0) return@registerForActivityResult
-
-            if (t == "zaprosRegion" || t == "lotRegion") {
-                // если первый угол ещё не задан — это первый тап
-                if (RegionPickState.x1 < 0) {
-                    RegionPickState.x1 = x
-                    RegionPickState.y1 = y
-                    // сразу запускаем оверлей на второй тап
-                    CalibResult.onResult = { _, x2, y2 ->
-                        runOnUiThread {
-                            val rx = minOf(RegionPickState.x1, x2)
-                            val ry = minOf(RegionPickState.y1, y2)
-                            val rw = kotlin.math.abs(x2 - RegionPickState.x1)
-                            val rh = kotlin.math.abs(y2 - RegionPickState.y1)
-                            val et = findViewById<EditText>(
-                                if (t == "zaprosRegion") R.id.etZapros else R.id.etLot
-                            )
-                            et.setText("$rx,$ry,$rw,$rh")
-                            Toast.makeText(this, "$t = $rx,$ry,$rw,$rh", Toast.LENGTH_SHORT).show()
-                            RegionPickState.x1 = -1
-                            RegionPickState.y1 = -1
-                            CalibResult.onResult = null
-                        }
-                    }
-                    launchCalibOverlay(t)
-                }
-            } else {
-                setTargetValue(t, x, y)
-                Toast.makeText(this, "$t = $x, $y", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -690,14 +647,10 @@ class SettingsActivity : AppCompatActivity() {
         findViewById<EditText>(R.id.etLot).setText(cfg.lotRegion.joinToString(","))
 
         findViewById<Button>(R.id.btnPickZapros).setOnClickListener {
-            pendingTarget = "zaprosRegion"
-            RegionPickState.x1 = -1
-            launchCalibOverlay("zaprosRegion")
+            startRegionPick("zaprosRegion", R.id.etZapros)
         }
         findViewById<Button>(R.id.btnPickLot).setOnClickListener {
-            pendingTarget = "lotRegion"
-            RegionPickState.x1 = -1
-            launchCalibOverlay("lotRegion")
+            startRegionPick("lotRegion", R.id.etLot)
         }
 
         bindPoint("btnZakaz", R.id.etBtnZakaz, R.id.btnPickBtnZakaz, cfg.btnZakaz)
@@ -714,8 +667,7 @@ class SettingsActivity : AppCompatActivity() {
             val et = row.findViewById<EditText>(R.id.etNum)
             et.setText(cfg.numKeys[i].joinToString(","))
             row.findViewById<Button>(R.id.btnPickNum).setOnClickListener {
-                pendingTarget = "num$i"
-                launchCalibOverlay("num$i")
+                startPointPick("num$i")
             }
             cont.addView(row)
             numFields[i] = et
@@ -727,19 +679,47 @@ class SettingsActivity : AppCompatActivity() {
         findViewById<Button>(R.id.btnSave).setOnClickListener { save() }
     }
 
+    private fun startRegionPick(key: String, etId: Int) {
+        RegionPickState.x1 = -1
+        RegionPickState.y1 = -1
+        CalibResult.onResult = { _, x, y ->
+            runOnUiThread {
+                if (RegionPickState.x1 < 0) {
+                    RegionPickState.x1 = x
+                    RegionPickState.y1 = y
+                    Toast.makeText(this, "Первый угол: $x,$y — веди крестик на второй", Toast.LENGTH_LONG).show()
+                    launchCalibOverlay(key)
+                } else {
+                    val rx = minOf(RegionPickState.x1, x)
+                    val ry = minOf(RegionPickState.y1, y)
+                    val rw = kotlin.math.abs(x - RegionPickState.x1)
+                    val rh = kotlin.math.abs(y - RegionPickState.y1)
+                    findViewById<EditText>(etId).setText("$rx,$ry,$rw,$rh")
+                    Toast.makeText(this, "$key = $rx,$ry,$rw,$rh", Toast.LENGTH_LONG).show()
+                    RegionPickState.x1 = -1
+                    RegionPickState.y1 = -1
+                    CalibResult.onResult = null
+                }
+            }
+        }
+        launchCalibOverlay(key)
+    }
+
+    private fun startPointPick(key: String) {
+        CalibResult.onResult = { k, x, y ->
+            runOnUiThread {
+                setTargetValue(k, x, y)
+                Toast.makeText(this, "$k = $x, $y", Toast.LENGTH_SHORT).show()
+                CalibResult.onResult = null
+            }
+        }
+        launchCalibOverlay(key)
+    }
+
     private fun bindPoint(key: String, etId: Int, btnId: Int, value: IntArray) {
         val et = findViewById<EditText>(etId)
         et.setText(value.joinToString(","))
-        findViewById<Button>(btnId).setOnClickListener {
-            pendingTarget = key
-            CalibResult.onResult = { k, x, y ->
-                runOnUiThread {
-                    setTargetValue(k, x, y)
-                    Toast.makeText(this, "$k = $x, $y", Toast.LENGTH_SHORT).show()
-                }
-            }
-            launchCalibOverlay(key)
-        }
+        findViewById<Button>(btnId).setOnClickListener { startPointPick(key) }
     }
 
     private fun launchCalibOverlay(key: String) {
