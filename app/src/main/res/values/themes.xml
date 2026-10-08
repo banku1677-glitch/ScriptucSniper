@@ -2,19 +2,28 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
 
     <style name="Theme.ScriptucSniper" parent="Theme.Material3.Dark.NoActionBar">
-        <item name="colorPrimary">@color/purple_primary</item>
+        <item name="colorPrimary">@color/gold_primary</item>
         <item name="colorOnPrimary">@color/bg_deep</item>
-        <item name="colorPrimaryContainer">@color/purple_glow</item>
+        <item name="colorPrimaryContainer">@color/gold_glow</item>
         <item name="colorOnPrimaryContainer">@color/text_primary</item>
-        <item name="colorSecondary">@color/purple_bright</item>
+
+        <item name="colorSecondary">@color/gold_bright</item>
         <item name="colorOnSecondary">@color/bg_deep</item>
+        <item name="colorSecondaryContainer">@color/gold_dim</item>
+        <item name="colorOnSecondaryContainer">@color/text_primary</item>
+
+        <item name="colorTertiary">@color/red_eye</item>
+        <item name="colorOnTertiary">@color/text_primary</item>
+
         <item name="android:colorBackground">@color/bg_deep</item>
         <item name="colorSurface">@color/bg_surface</item>
         <item name="colorOnSurface">@color/text_primary</item>
         <item name="colorSurfaceVariant">@color/bg_elevated</item>
         <item name="colorOnSurfaceVariant">@color/text_secondary</item>
+
         <item name="colorOutline">@color/bg_stroke</item>
         <item name="colorError">@color/danger</item>
+
         <item name="android:statusBarColor">@color/bg_deep</item>
         <item name="android:navigationBarColor">@color/bg_deep</item>
         <item name="android:windowLightStatusBar">false</item>
