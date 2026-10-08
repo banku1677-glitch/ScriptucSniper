@@ -9,7 +9,6 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
-import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
@@ -27,11 +26,9 @@ import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.Environment
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
-import android.provider.MediaStore
 import android.provider.Settings
 import android.util.DisplayMetrics
 import android.view.MotionEvent
@@ -72,6 +69,8 @@ data class Config(
     val zaprosRegion: IntArray = intArrayOf(1764, 187, 145, 27),
     val lotRegion: IntArray = intArrayOf(1133, 386, 253, 75),
     val btnZakaz: IntArray = intArrayOf(2111, 183),
+    val priceField: IntArray = intArrayOf(1100, 400),
+    val backspace: IntArray = intArrayOf(1900, 690),
     val btnVtoroyZakaz: IntArray = intArrayOf(1880, 189),
     val btnNazad: IntArray = intArrayOf(1740, 263),
     val btnOtmena: IntArray = intArrayOf(1730, 282),
@@ -116,6 +115,8 @@ data class Config(
                 zaprosRegion = rg("zaprosRegion", intArrayOf(1764, 187, 145, 27)),
                 lotRegion = rg("lotRegion", intArrayOf(1133, 386, 253, 75)),
                 btnZakaz = pt("btnZakaz", intArrayOf(2111, 183)),
+                priceField = pt("priceField", intArrayOf(1100, 400)),
+                backspace = pt("backspace", intArrayOf(1900, 690)),
                 btnVtoroyZakaz = pt("btnVtoroyZakaz", intArrayOf(1880, 189)),
                 btnNazad = pt("btnNazad", intArrayOf(1740, 263)),
                 btnOtmena = pt("btnOtmena", intArrayOf(1730, 282)),
@@ -290,7 +291,6 @@ class SniperService : Service() {
     private lateinit var ocr: PriceOcr
     private val scope = CoroutineScope(Dispatchers.IO + Job())
     private var loopJob: Job? = null
-    private var frameSaved = false
 
     override fun onCreate() {
         super.onCreate()
@@ -328,12 +328,11 @@ class SniperService : Service() {
         startForegroundCompat()
         try {
             screenReader.start(rc, data)
-            log(">>> ScreenReader стартовал: кадр ${screenReader.width}x${screenReader.height}")
+            log(">>> ScreenReader стартовал")
         } catch (t: Throwable) {
             log("Ошибка старта ScreenReader: ${t.message}")
             stopSelf(); return START_NOT_STICKY
         }
-        frameSaved = false
         startLoop()
         return START_NOT_STICKY
     }
@@ -375,31 +374,7 @@ class SniperService : Service() {
         while (running) {
             tick++
             val frame = screenReader.capture()
-            if (frame == null) {
-                if (tick % 10 == 0) log("tick=$tick нет кадров")
-                delay(50); continue
-            }
-
-            // дамп кадра в Pictures — один раз на 50-м тике
-            if (!frameSaved && tick >= 50) {
-                frameSaved = true
-                try {
-                    val values = ContentValues().apply {
-                        put(MediaStore.Images.Media.DISPLAY_NAME, "scriptuc_frame_${System.currentTimeMillis()}.png")
-                        put(MediaStore.Images.Media.MIME_TYPE, "image/png")
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                            put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES)
-                        }
-                    }
-                    val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
-                    contentResolver.openOutputStream(uri!!)?.use { out ->
-                        frame.compress(Bitmap.CompressFormat.PNG, 100, out)
-                    }
-                    log(">>> КАДР СОХРАНЁН в Галерею/Pictures")
-                } catch (t: Throwable) {
-                    log(">>> не смог сохранить кадр: ${t.message}")
-                }
-            }
+            if (frame == null) { delay(50); continue }
 
             val lot = ocr.readNumber(frame, cfg.lotRegion)
             if (lot != null && lot > 0f) cenaLota = lot
@@ -407,7 +382,7 @@ class SniperService : Service() {
             val cur = ocr.readNumber(frame, cfg.zaprosRegion)
 
             if (tick % 10 == 0) {
-                log("tick=$tick cur=$cur lot=$lot frame=${frame.width}x${frame.height}")
+                log("tick=$tick cur=$cur lot=$lot prev=$prevZapros cenaLota=$cenaLota")
             }
 
             if (cur != null && cur > 0f) {
@@ -431,9 +406,11 @@ class SniperService : Service() {
     private suspend fun doSnipe(newZapros: Float) {
         val tap = TapService.instance
         if (tap == null) { log("TapService не подключён"); return }
+
         tap.tapAndWait(cfg.btnZakaz[0], cfg.btnZakaz[1], cfg.delayZakaz)
+        tap.tapAndWait(cfg.priceField[0], cfg.priceField[1], cfg.delayBefore)
+        repeat(8) { tap.tapAndWait(cfg.backspace[0], cfg.backspace[1], cfg.delayInput) }
         inputNumber(tap, newZapros.toString())
-        delay(cfg.delayBefore)
         tap.tapAndWait(cfg.btnGalochka[0], cfg.btnGalochka[1], cfg.delayAfter)
         tap.tapAndWait(cfg.btnVtoroyZakaz[0], cfg.btnVtoroyZakaz[1], cfg.delayKlava)
         tap.tapAndWait(cfg.btnOtmena[0], cfg.btnOtmena[1], cfg.delayOtmena)
@@ -465,14 +442,10 @@ class SniperService : Service() {
             .setContentText("Работает")
             .setSmallIcon(android.R.drawable.ic_menu_compass)
             .setOngoing(true)
-            .setPriority(CompatP.PRIORITY_LOW)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
 
     private fun log(msg: String) { logSink?.invoke(msg) }
-}
-
-object CompatP {
-    const val PRIORITY_LOW = NotificationCompat.PRIORITY_LOW
 }
 
 class MainActivity : AppCompatActivity() {
@@ -592,15 +565,17 @@ class SettingsActivity : AppCompatActivity() {
 
         val etZapros = findViewById<EditText>(R.id.etZapros)
         val etLot = findViewById<EditText>(R.id.etLot)
+        val etPriceField = findViewById<EditText>(R.id.etPriceField)
+        val etBackspace = findViewById<EditText>(R.id.etBackspace)
         etZapros.setText(cfg.zaprosRegion.joinToString(","))
         etLot.setText(cfg.lotRegion.joinToString(","))
+        etPriceField.setText(cfg.priceField.joinToString(","))
+        etBackspace.setText(cfg.backspace.joinToString(","))
 
-        findViewById<Button>(R.id.btnPickZapros).setOnClickListener {
-            startPick("zaprosRegion", etZapros)
-        }
-        findViewById<Button>(R.id.btnPickLot).setOnClickListener {
-            startPick("lotRegion", etLot)
-        }
+        findViewById<Button>(R.id.btnPickZapros).setOnClickListener { startPick("zaprosRegion", etZapros) }
+        findViewById<Button>(R.id.btnPickLot).setOnClickListener { startPick("lotRegion", etLot) }
+        findViewById<Button>(R.id.btnPickPriceField).setOnClickListener { startPick("priceField", etPriceField) }
+        findViewById<Button>(R.id.btnPickBackspace).setOnClickListener { startPick("backspace", etBackspace) }
 
         bindPoint("btnZakaz", R.id.etBtnZakaz, R.id.btnPickBtnZakaz, cfg.btnZakaz)
         bindPoint("btnVtoroyZakaz", R.id.etBtnVtoroy, R.id.btnPickBtnVtoroy, cfg.btnVtoroyZakaz)
@@ -662,6 +637,8 @@ class SettingsActivity : AppCompatActivity() {
     private fun save() {
         val p = getSharedPreferences(Config.PREF, MODE_PRIVATE).edit()
         savePoint(p, "btnZakaz", R.id.etBtnZakaz)
+        savePoint(p, "priceField", R.id.etPriceField)
+        savePoint(p, "backspace", R.id.etBackspace)
         savePoint(p, "btnVtoroyZakaz", R.id.etBtnVtoroy)
         savePoint(p, "btnNazad", R.id.etBtnNazad)
         savePoint(p, "btnOtmena", R.id.etBtnOtmena)
