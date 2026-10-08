@@ -404,10 +404,28 @@ class SniperService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun startLoop() {
-        if (loopJob?.isActive == true) return
+        if (loopJob?.isActive == true) {
+            log(">>> loop уже активен")
+            return
+        }
         running = true
         log("Скрипт запущен. Перебив +${cfg.perebiv}")
-        loopJob = scope.launch { snipeLoop() }
+        loopJob = scope.launch {
+            try {
+                log(">>> loop корутина пошла")
+                snipeLoop()
+                log(">>> loop корутина вышла нормально")
+            } catch (t: Throwable) {
+                log(">>> loop УПАЛ: ${t.message}")
+                try {
+                    val sw = java.io.StringWriter()
+                    t.printStackTrace(java.io.PrintWriter(sw))
+                    java.io.File(filesDir, "crash.txt").appendText(
+                        "\n\n=== loop crash ${System.currentTimeMillis()} ===\n" + sw.toString()
+                    )
+                } catch (_: Throwable) {}
+            }
+        }
     }
 
     private fun stopLoop() {
@@ -425,12 +443,13 @@ class SniperService : Service() {
 
         while (running) {
             tick++
+            if (tick <= 3) log(">>> tick $tick начинаю capture")
             val frame = screenReader.capture()
+            if (tick <= 3) log(">>> tick $tick capture вернул ${frame?.let {"${it.width}x${it.height}"} ?: "null"}")
+
             if (frame == null) {
                 if (tick % 10 == 0) log("tick=$tick frame=NULL (нет кадров)")
                 delay(50); continue
-            } else {
-                if (tick % 10 == 0) log("tick=$tick frame=${frame.width}x${frame.height}")
             }
 
             val lot = ocr.readNumber(frame, cfg.lotRegion)
