@@ -46,7 +46,8 @@ class CalibrationService : Service() {
     private var x1 = -1
     private var y1 = -1
 
-    private fun isRegion(): Boolean = key == "zaprosRegion" || key == "lotRegion"
+    private fun isRegion(): Boolean =
+        key == "zaprosRegion" || key == "lotRegion" || key == "orderPriceRegion"
 
     override fun onBind(intent: Intent?): IBinder? = null
 
