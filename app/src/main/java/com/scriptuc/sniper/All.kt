@@ -58,8 +58,8 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 
 data class Config(
-    val perebiv: Float = 999f,
-    val maxPrice: Float = 0f,        // 0 = без ограничения
+    val perebiv: Float = 0.01f,
+    val maxPrice: Float = 80f,
     val loopMs: Long = 10L,
     val delayZakaz: Long = 600L,
     val delayBefore: Long = 400L,
@@ -72,19 +72,25 @@ data class Config(
     val lotRegion: IntArray = intArrayOf(1700, 470, 400, 70),
 
     val btnZakaz: IntArray = intArrayOf(2139, 186),
-    val priceField: IntArray = intArrayOf(990, 395),
-    val backspace: IntArray = intArrayOf(1690, 660),
-    val btnVtoroyZakaz: IntArray = intArrayOf(1124, 759),
+    val priceField: IntArray = intArrayOf(1070, 443),
+    val backspace: IntArray = intArrayOf(1942, 782),
+    val btnVtoroyZakaz: IntArray = intArrayOf(1120, 765),
     val btnNazad: IntArray = intArrayOf(1740, 263),
-    val btnOtmena: IntArray = intArrayOf(1744, 282),
-    val btnGalochka: IntArray = intArrayOf(1911, 916),
-    val btnTochka: IntArray = intArrayOf(1411, 922),
+    val btnOtmena: IntArray = intArrayOf(1748, 290),
+    val btnGalochka: IntArray = intArrayOf(1925, 945),
+    val btnTochka: IntArray = intArrayOf(1423, 920),
 
     val numKeys: Array<IntArray> = arrayOf(
-        intArrayOf(850, 805), intArrayOf(430, 460), intArrayOf(850, 460),
-        intArrayOf(1275, 460), intArrayOf(430, 575), intArrayOf(850, 575),
-        intArrayOf(1276, 575), intArrayOf(430, 690), intArrayOf(850, 690),
-        intArrayOf(1275, 690)
+        intArrayOf(903, 949),
+        intArrayOf(401, 574),
+        intArrayOf(925, 546),
+        intArrayOf(1395, 595),
+        intArrayOf(409, 696),
+        intArrayOf(931, 708),
+        intArrayOf(1433, 716),
+        intArrayOf(418, 796),
+        intArrayOf(915, 823),
+        intArrayOf(1418, 850)
     ),
 ) {
     companion object {
@@ -102,14 +108,14 @@ data class Config(
                 return if (a.size == 4) a.toIntArray() else def
             }
             val defNum = arrayOf(
-                intArrayOf(850, 805), intArrayOf(430, 460), intArrayOf(850, 460),
-                intArrayOf(1275, 460), intArrayOf(430, 575), intArrayOf(850, 575),
-                intArrayOf(1276, 575), intArrayOf(430, 690), intArrayOf(850, 690),
-                intArrayOf(1275, 690)
+                intArrayOf(903, 949), intArrayOf(401, 574), intArrayOf(925, 546),
+                intArrayOf(1395, 595), intArrayOf(409, 696), intArrayOf(931, 708),
+                intArrayOf(1433, 716), intArrayOf(418, 796), intArrayOf(915, 823),
+                intArrayOf(1418, 850)
             )
             return Config(
-                perebiv = p.getFloat("perebiv", 999f),
-                maxPrice = p.getFloat("maxPrice", 0f),
+                perebiv = p.getFloat("perebiv", 0.01f),
+                maxPrice = p.getFloat("maxPrice", 80f),
                 loopMs = p.getLong("loopMs", 10L),
                 delayZakaz = p.getLong("delayZakaz", 600L),
                 delayBefore = p.getLong("delayBefore", 400L),
@@ -120,13 +126,13 @@ data class Config(
                 zaprosRegion = rg("zaprosRegion", intArrayOf(1750, 165, 230, 50)),
                 lotRegion = rg("lotRegion", intArrayOf(1700, 470, 400, 70)),
                 btnZakaz = pt("btnZakaz", intArrayOf(2139, 186)),
-                priceField = pt("priceField", intArrayOf(990, 395)),
-                backspace = pt("backspace", intArrayOf(1690, 660)),
-                btnVtoroyZakaz = pt("btnVtoroyZakaz", intArrayOf(1124, 759)),
+                priceField = pt("priceField", intArrayOf(1070, 443)),
+                backspace = pt("backspace", intArrayOf(1942, 782)),
+                btnVtoroyZakaz = pt("btnVtoroyZakaz", intArrayOf(1120, 765)),
                 btnNazad = pt("btnNazad", intArrayOf(1740, 263)),
-                btnOtmena = pt("btnOtmena", intArrayOf(1744, 282)),
-                btnGalochka = pt("btnGalochka", intArrayOf(1911, 916)),
-                btnTochka = pt("btnTochka", intArrayOf(1411, 922)),
+                btnOtmena = pt("btnOtmena", intArrayOf(1748, 290)),
+                btnGalochka = pt("btnGalochka", intArrayOf(1925, 945)),
+                btnTochka = pt("btnTochka", intArrayOf(1423, 920)),
                 numKeys = Array(10) { i -> pt("num$i", defNum[i]) },
             )
         }
@@ -260,15 +266,12 @@ class PriceOcr {
         val ch = h.coerceAtMost(frame.height - cy)
         if (cw <= 0 || ch <= 0) return null
 
-        // 1. кроп
         val crop = Bitmap.createBitmap(frame, cx, cy, cw, ch)
-        // 2. апскейл 6x
         val sw = cw * 6
         val sh = ch * 6
         val scaled = Bitmap.createScaledBitmap(crop, sw, sh, true)
         crop.recycle()
 
-        // 3. бинаризация: светлый текст на тёмном фоне → чёрный текст на белом
         try {
             val pixels = IntArray(sw * sh)
             scaled.getPixels(pixels, 0, sw, 0, 0, sw, sh)
@@ -281,9 +284,7 @@ class PriceOcr {
                 pixels[i] = if (lum > 170) 0xFF000000.toInt() else 0xFFFFFFFF.toInt()
             }
             scaled.setPixels(pixels, 0, sw, 0, 0, sw, sh)
-        } catch (_: Throwable) {
-            // если что-то пошло не так — работаем с небинаризованным
-        }
+        } catch (_: Throwable) {}
 
         val image = InputImage.fromBitmap(scaled, 0)
 
@@ -439,7 +440,6 @@ class SniperService : Service() {
                 if (cur != null && cur > 0f) {
                     val newZapros = cur + cfg.perebiv
                     if (cur > prevZapros && prevZapros > 0f && newZapros < cenaLota) {
-                        // защита по макс. цене
                         if (cfg.maxPrice > 0f && newZapros > cfg.maxPrice) {
                             log(">>> пропуск: new=$newZapros > max=${cfg.maxPrice}")
                         } else {
@@ -467,19 +467,12 @@ class SniperService : Service() {
         val tap = TapService.instance
         if (tap == null) { log("TapService не подключён"); return }
 
-        // 1. открыть окно заказа
         tap.tapAndWait(cfg.btnZakaz[0], cfg.btnZakaz[1], cfg.delayZakaz)
-        // 2. тап по полю цены (открыть клавиатуру)
         tap.tapAndWait(cfg.priceField[0], cfg.priceField[1], cfg.delayBefore)
-        // 3. стереть старое
         repeat(8) { tap.tapAndWait(cfg.backspace[0], cfg.backspace[1], cfg.delayInput) }
-        // 4. ввести цифры
         inputNumber(tap, newZapros.toString())
-        // 5. галочка
         tap.tapAndWait(cfg.btnGalochka[0], cfg.btnGalochka[1], cfg.delayAfter)
-        // 6. выставить ордер
         tap.tapAndWait(cfg.btnVtoroyZakaz[0], cfg.btnVtoroyZakaz[1], cfg.delayKlava)
-        // 7. закрыть окно
         tap.tapAndWait(cfg.btnOtmena[0], cfg.btnOtmena[1], cfg.delayOtmena)
 
         log(">>> ордер выставлен на $newZapros")
@@ -731,8 +724,8 @@ class SettingsActivity : AppCompatActivity() {
         }
         saveRegion(p, "zaprosRegion", R.id.etZapros)
         saveRegion(p, "lotRegion", R.id.etLot)
-        val perebiv = findViewById<EditText>(R.id.etPerebiv).text.toString().toFloatOrNull() ?: 999f
-        val maxP = findViewById<EditText>(R.id.etMaxPrice).text.toString().toFloatOrNull() ?: 0f
+        val perebiv = findViewById<EditText>(R.id.etPerebiv).text.toString().toFloatOrNull() ?: 0.01f
+        val maxP = findViewById<EditText>(R.id.etMaxPrice).text.toString().toFloatOrNull() ?: 80f
         val loop = findViewById<EditText>(R.id.etLoopMs).text.toString().toLongOrNull() ?: 10L
         p.putFloat("perebiv", perebiv)
         p.putFloat("maxPrice", maxP)
