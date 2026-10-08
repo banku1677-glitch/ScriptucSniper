@@ -52,6 +52,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 
@@ -220,43 +221,45 @@ class ScreenReader(private val ctx: Context) {
         projection = null
     }
 
-    suspend fun capture(): Bitmap? = suspendCoroutine { cont ->
-        val reader = imageReader
-        if (reader == null) {
-            cont.resume(null)
-            return@suspendCoroutine
-        }
-        reader.setOnImageAvailableListener({ r ->
-            var image: Image? = null
-            var bmp: Bitmap? = null
-            var cropped: Bitmap? = null
-            try {
-                image = r.acquireLatestImage()
-                if (image == null) {
-                    cont.resume(null)
-                    return@setOnImageAvailableListener
-                }
-                val plane = image.planes[0]
-                val buffer = plane.buffer
-                val rowStride = plane.rowStride
-                val pixelStride = plane.pixelStride
-                val rowPadding = rowStride - pixelStride * width
-
-                bmp = Bitmap.createBitmap(
-                    width + rowPadding / pixelStride, height, Bitmap.Config.ARGB_8888
-                )
-                bmp.copyPixelsFromBuffer(buffer)
-                cropped = Bitmap.createBitmap(bmp, 0, 0, width, height)
-                cont.resume(cropped)
-            } catch (t: Throwable) {
-                try { cropped?.recycle() } catch (_: Throwable) {}
+    suspend fun capture(): Bitmap? = withTimeoutOrNull(500L) {
+        suspendCoroutine { cont ->
+            val reader = imageReader
+            if (reader == null) {
                 cont.resume(null)
-            } finally {
-                try { bmp?.recycle() } catch (_: Throwable) {}
-                image?.close()
-                r.setOnImageAvailableListener(null, null)
+                return@suspendCoroutine
             }
-        }, Handler(Looper.getMainLooper()))
+            reader.setOnImageAvailableListener({ r ->
+                var image: Image? = null
+                var bmp: Bitmap? = null
+                var cropped: Bitmap? = null
+                try {
+                    image = r.acquireLatestImage()
+                    if (image == null) {
+                        cont.resume(null)
+                        return@setOnImageAvailableListener
+                    }
+                    val plane = image.planes[0]
+                    val buffer = plane.buffer
+                    val rowStride = plane.rowStride
+                    val pixelStride = plane.pixelStride
+                    val rowPadding = rowStride - pixelStride * width
+
+                    bmp = Bitmap.createBitmap(
+                        width + rowPadding / pixelStride, height, Bitmap.Config.ARGB_8888
+                    )
+                    bmp.copyPixelsFromBuffer(buffer)
+                    cropped = Bitmap.createBitmap(bmp, 0, 0, width, height)
+                    cont.resume(cropped)
+                } catch (t: Throwable) {
+                    try { cropped?.recycle() } catch (_: Throwable) {}
+                    cont.resume(null)
+                } finally {
+                    try { bmp?.recycle() } catch (_: Throwable) {}
+                    image?.close()
+                    r.setOnImageAvailableListener(null, null)
+                }
+            }, Handler(Looper.getMainLooper()))
+        }
     }
 }
 
@@ -358,6 +361,7 @@ class SniperService : Service() {
                 startForegroundCompat()
                 try {
                     screenReader.start(rc, data)
+                    log(">>> ScreenReader стартовал, ${screenReader.hashCode()}")
                 } catch (t: Throwable) {
                     log("Ошибка старта ScreenReader: ${t.message}")
                     try {
@@ -423,8 +427,10 @@ class SniperService : Service() {
             tick++
             val frame = screenReader.capture()
             if (frame == null) {
-                if (tick % 50 == 0) log("tick=$tick frame=null")
-                delay(20); continue
+                if (tick % 10 == 0) log("tick=$tick frame=NULL (нет кадров)")
+                delay(50); continue
+            } else {
+                if (tick % 10 == 0) log("tick=$tick frame=${frame.width}x${frame.height}")
             }
 
             val lot = ocr.readNumber(frame, cfg.lotRegion)
@@ -432,15 +438,14 @@ class SniperService : Service() {
 
             val cur = ocr.readNumber(frame, cfg.zaprosRegion)
 
-            if (tick % 100 == 0) {
+            if (tick % 10 == 0) {
                 log("tick=$tick cur=$cur lot=$lot prev=$prevZapros cenaLota=$cenaLota")
             }
 
             if (cur != null && cur > 0f) {
                 val newZapros = cur + cfg.perebiv
-                log("zapros=%.2f prev=%.2f lot=%.2f new=%.2f".format(cur, prevZapros, cenaLota, newZapros))
-
                 if (cur > prevZapros && prevZapros > 0f && newZapros < cenaLota) {
+                    log(">>> SNIPE new=$newZapros")
                     doSnipe(newZapros)
                     lastRefresh = System.currentTimeMillis()
                 }
@@ -462,7 +467,6 @@ class SniperService : Service() {
             log("TapService не подключён — включи Accessibility")
             return
         }
-        log(">>> SNIPE new=$newZapros")
         tap.tapAndWait(cfg.btnZakaz[0], cfg.btnZakaz[1], cfg.delayZakaz)
         inputNumber(tap, newZapros.toString())
         Thread.sleep(cfg.delayBefore)
