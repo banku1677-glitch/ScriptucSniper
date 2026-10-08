@@ -197,10 +197,14 @@ class ScreenReader(private val ctx: Context) {
 
         val wm = ctx.getSystemService(Context.WINDOW_SERVICE) as WindowManager
         val bounds = wm.currentWindowMetrics.bounds
-        // захватываем в половину разрешения — быстрее и меньше памяти,
-        // OCR всё равно апскейлит кроп
-        width = bounds.width() / 2
-        height = bounds.height() / 2
+
+        // Standoff 2 всегда в ландшафте — берём больший размер как ширину.
+        val screenW = maxOf(bounds.width(), bounds.height())
+        val screenH = minOf(bounds.width(), bounds.height())
+
+        // захватываем в половину разрешения (быстрее, меньше памяти)
+        width = screenW / 2
+        height = screenH / 2
         dpi = ctx.resources.displayMetrics.densityDpi / 2
 
         imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 3)
@@ -223,7 +227,6 @@ class ScreenReader(private val ctx: Context) {
         projection = null
     }
 
-    // синхронный polling acquireLatestImage, без listener и suspendCoroutine
     suspend fun capture(): Bitmap? = withContext(Dispatchers.IO) {
         val reader = imageReader ?: return@withContext null
         val deadline = System.currentTimeMillis() + 500L
@@ -261,8 +264,7 @@ class PriceOcr {
 
     private val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
 
-    // region приходит в координатах ПОЛНОГО экрана.
-    // кадр в половинном разрешении → делим x,y,w,h на 2 перед кропом.
+    // region в координатах ПОЛНОГО экрана (ландшафт). кадр в половине → делим на 2.
     suspend fun readNumber(frame: Bitmap, region: IntArray): Float? {
         val scale = 2
         val x = region[0] / scale
@@ -444,9 +446,8 @@ class SniperService : Service() {
 
         while (running) {
             tick++
-            if (tick <= 3) log(">>> tick $tick начинаю capture")
             val frame = screenReader.capture()
-            if (tick <= 3) log(">>> tick $tick capture вернул ${frame?.let {"${it.width}x${it.height}"} ?: "null"}")
+            if (tick <= 3) log(">>> tick $tick frame=${frame?.let {"${it.width}x${it.height}"} ?: "null"}")
 
             if (frame == null) {
                 if (tick % 10 == 0) log("tick=$tick frame=NULL (нет кадров)")
